@@ -5,20 +5,37 @@
 // ===================== เรียก API =====================
 
 /**
- * อ่านข้อมูล — ใช้ JSONP เพราะหน้าเว็บอยู่คนละโดเมนกับ Apps Script
- * วิธีนี้ทำงานได้ทุกเบราว์เซอร์โดยไม่ต้องพึ่ง CORS
+ * อ่านข้อมูล — มี 2 ช่องทางสำรองกัน
+ *
+ * ช่องทางแรกใช้ JSONP (แทรกแท็ก <script>) ซึ่งทำงานได้แม้เบราว์เซอร์ไม่รองรับ CORS
+ * แต่บางเครื่องมีส่วนขยายบล็อกสคริปต์ข้ามโดเมน หรือถ้าล็อกอิน Google หลายบัญชี
+ * พร้อมกัน Apps Script จะเปลี่ยนเส้นทางจนโหลดสคริปต์ไม่สำเร็จ
+ *
+ * เมื่อช่องทางแรกล้มเหลว "ในระดับการเชื่อมต่อ" จะสลับไปใช้ fetch() ให้อัตโนมัติ
+ * แต่ถ้าเซิร์ฟเวอร์ตอบกลับมาแล้วว่าปฏิเสธ (เช่น ไม่พบรหัสพนักงาน) จะไม่ลองซ้ำ
  */
 function apiGet(params) {
-  return new Promise(function (resolve, reject) {
-    if (!API_URL || API_URL.indexOf('http') !== 0) {
-      return reject(new Error('ยังไม่ได้ตั้งค่า API_URL ในไฟล์ config.js'));
-    }
+  if (!API_URL || API_URL.indexOf('http') !== 0) {
+    return Promise.reject(new Error('ยังไม่ได้ตั้งค่า API_URL ในไฟล์ config.js'));
+  }
+  return jsonpGet_(params).catch(function (err) {
+    if (!err.transport) throw err;
+    return fetchGet_(params).catch(function (err2) {
+      throw new Error(err2.transport
+        ? 'เชื่อมต่อเซิร์ฟเวอร์ไม่สำเร็จทั้ง 2 ช่องทาง — ' +
+          'ลองปิดส่วนขยายที่บล็อกโฆษณา หรือเปิดในหน้าต่างไม่ระบุตัวตน ' +
+          'ถ้าล็อกอิน Google หลายบัญชีอยู่ ให้ออกจากระบบให้เหลือบัญชีเดียว'
+        : err2.message);
+    });
+  });
+}
 
+/** ช่องทางที่ 1: JSONP */
+function jsonpGet_(params) {
+  return new Promise(function (resolve, reject) {
     var cbName = 'jsonp_' + Date.now() + '_' + Math.floor(Math.random() * 100000);
     var script = document.createElement('script');
-    var timer  = setTimeout(function () {
-      done(); reject(new Error('เชื่อมต่อเซิร์ฟเวอร์ไม่สำเร็จ (หมดเวลา) — ตรวจสอบสัญญาณอินเทอร์เน็ต'));
-    }, 30000);
+    var timer  = setTimeout(function () { done(); reject(transportErr_('หมดเวลารอ')); }, 20000);
 
     function done() {
       clearTimeout(timer);
@@ -28,21 +45,42 @@ function apiGet(params) {
 
     window[cbName] = function (res) {
       done();
-      if (!res)             reject(new Error('เซิร์ฟเวอร์ไม่ตอบข้อมูล'));
-      else if (!res.ok)     reject(new Error(res.error || 'เกิดข้อผิดพลาด'));
-      else                  resolve(res);
+      if (!res)         reject(transportErr_('เซิร์ฟเวอร์ไม่ตอบข้อมูล'));
+      else if (!res.ok) reject(new Error(res.error || 'เกิดข้อผิดพลาด'));
+      else              resolve(res);
     };
 
-    var qs = Object.keys(params).map(function (k) {
-      return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
-    }).join('&');
-
-    script.src = API_URL + '?' + qs + '&callback=' + cbName;
-    script.onerror = function () {
-      done(); reject(new Error('เชื่อมต่อเซิร์ฟเวอร์ไม่สำเร็จ — ตรวจสอบ API_URL และการ deploy'));
-    };
+    script.src = API_URL + '?' + queryString_(params) + '&callback=' + cbName;
+    script.onerror = function () { done(); reject(transportErr_('โหลดสคริปต์ไม่สำเร็จ')); };
     document.head.appendChild(script);
   });
+}
+
+/** ช่องทางที่ 2: fetch ธรรมดา (Apps Script ส่งหัว CORS มาให้กับ GET อยู่แล้ว) */
+function fetchGet_(params) {
+  return fetch(API_URL + '?' + queryString_(params), { method: 'GET', redirect: 'follow' })
+    .then(function (r) { return r.text(); })
+    .catch(function () { throw transportErr_('เรียก fetch ไม่สำเร็จ'); })
+    .then(function (text) {
+      var res;
+      try { res = JSON.parse(text); }
+      catch (e) { throw transportErr_('เซิร์ฟเวอร์ตอบกลับผิดรูปแบบ'); }
+      if (!res.ok) throw new Error(res.error || 'เกิดข้อผิดพลาด');
+      return res;
+    });
+}
+
+/** error ที่เกิดจากการเชื่อมต่อ (ควรลองช่องทางสำรอง) ไม่ใช่การถูกเซิร์ฟเวอร์ปฏิเสธ */
+function transportErr_(detail) {
+  var e = new Error('เชื่อมต่อเซิร์ฟเวอร์ไม่สำเร็จ (' + detail + ')');
+  e.transport = true;
+  return e;
+}
+
+function queryString_(params) {
+  return Object.keys(params).map(function (k) {
+    return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
+  }).join('&');
 }
 
 /**
@@ -68,7 +106,11 @@ function apiPost(body) {
     return res;
   })
   .catch(function (e) {
-    if (e instanceof TypeError) throw new Error('ส่งข้อมูลไม่สำเร็จ — ตรวจสอบสัญญาณอินเทอร์เน็ต');
+    // TypeError จาก fetch = ไปไม่ถึงเซิร์ฟเวอร์ (เน็ตหลุด หรือถูกส่วนขยายบล็อก)
+    if (e instanceof TypeError) {
+      throw new Error('ส่งข้อมูลไม่สำเร็จ — ตรวจสอบสัญญาณอินเทอร์เน็ต ' +
+                      'หรือลองปิดส่วนขยายที่บล็อกโฆษณาแล้วลองใหม่');
+    }
     throw e;
   });
 }
