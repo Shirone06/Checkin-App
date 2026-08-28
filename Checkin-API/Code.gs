@@ -210,9 +210,12 @@ function apiCheckout_(d) {
     var sheet = getSheet_(SH_LOG);
     var idx   = headerIndex_(sheet, HEAD_LOG);
     var found = findLogRow_(sheet, idx, d.logId);
-    if (!found)                              throw new Error('ไม่พบรายการ ' + d.logId);
-    if (get_(found.row, idx, 'รหัสพนักงาน') !== emp.code) throw new Error('รายการนี้ไม่ใช่ของคุณ');
-    if (get_(found.row, idx, 'เวลาออก'))     throw new Error('รายการนี้เช็คเอาท์ไปแล้ว');
+    if (!found) throw new Error('ไม่พบรายการ ' + d.logId);
+    // ชีตแปลงรหัสพนักงานที่เป็นตัวเลขให้เป็น number จึงต้องเทียบผ่าน normCode_
+    if (normCode_(get_(found.row, idx, 'รหัสพนักงาน')) !== emp.code) {
+      throw new Error('รายการนี้ไม่ใช่ของคุณ');
+    }
+    if (cellTime_(get_(found.row, idx, 'เวลาออก'))) throw new Error('รายการนี้เช็คเอาท์ไปแล้ว');
 
     var now = new Date();
     var row = found.row;
@@ -233,7 +236,7 @@ function apiCheckout_(d) {
       put_(row, idx, 'รูปเช็คเอาท์', savePhoto_(d.photo, get_(row, idx, 'Log ID') + '_OUT'));
     }
 
-    var startIso = get_(row, idx, 'เข้าเมื่อ');
+    var startIso = cellIso_(get_(row, idx, 'เข้าเมื่อ'));
     var minutes  = '';
     if (startIso) {
       var start = new Date(startIso);
@@ -284,26 +287,26 @@ function apiDashboard_(p) {
       var logId = get_(r, idx, 'Log ID');
       if (!logId) continue;
 
-      var iso  = String(get_(r, idx, 'เข้าเมื่อ') || '');
-      var day  = iso ? iso.substring(0, 10) : isoFromThaiDate_(get_(r, idx, 'วันที่'));
+      var iso  = cellIso_(get_(r, idx, 'เข้าเมื่อ'));
+      var day  = iso ? iso.substring(0, 10) : isoFromThaiDate_(cellDate_(get_(r, idx, 'วันที่')));
       if (from && day && day < from) continue;
       if (to   && day && day > to)   continue;
 
       rows.push({
         logId:       logId,
         day:         day,
-        date:        String(get_(r, idx, 'วันที่')),
+        date:        cellDate_(get_(r, idx, 'วันที่')),
         empCode:     String(get_(r, idx, 'รหัสพนักงาน')),
         empName:     String(get_(r, idx, 'ชื่อพนักงาน')),
         locationId:  String(get_(r, idx, 'รหัสหน่วยงาน')),
         location:    String(get_(r, idx, 'หน่วยงาน')),
-        timeIn:      String(get_(r, idx, 'เวลาเข้า')),
+        timeIn:      cellTime_(get_(r, idx, 'เวลาเข้า')),
         latIn:       numOrNull_(get_(r, idx, 'ละติจูดเข้า')),
         lngIn:       numOrNull_(get_(r, idx, 'ลองจิจูดเข้า')),
         accIn:       numOrNull_(get_(r, idx, 'ความแม่นยำเข้า(ม.)')),
         distIn:      numOrNull_(get_(r, idx, 'ระยะห่างเข้า(ม.)')),
         photoIn:     String(get_(r, idx, 'รูปเช็คอิน')),
-        timeOut:     String(get_(r, idx, 'เวลาออก')),
+        timeOut:     cellTime_(get_(r, idx, 'เวลาออก')),
         latOut:      numOrNull_(get_(r, idx, 'ละติจูดออก')),
         lngOut:      numOrNull_(get_(r, idx, 'ลองจิจูดออก')),
         distOut:     numOrNull_(get_(r, idx, 'ระยะห่างออก(ม.)')),
@@ -541,18 +544,18 @@ function findOpenLogs_(empCode) {
   for (var i = 0; i < values.length; i++) {
     var r = values[i];
     if (normCode_(get_(r, idx, 'รหัสพนักงาน')) !== empCode) continue;
-    if (String(get_(r, idx, 'เวลาออก')).trim()) continue;
+    if (cellTime_(get_(r, idx, 'เวลาออก'))) continue;
     var logId = String(get_(r, idx, 'Log ID')).trim();
     if (!logId) continue;
 
     out.push({
       logId:      logId,
-      date:       String(get_(r, idx, 'วันที่')),
-      timeIn:     String(get_(r, idx, 'เวลาเข้า')),
-      locationId: String(get_(r, idx, 'รหัสหน่วยงาน')),
-      location:   String(get_(r, idx, 'หน่วยงาน')),
-      photoIn:    String(get_(r, idx, 'รูปเช็คอิน')),
-      startIso:   String(get_(r, idx, 'เข้าเมื่อ'))
+      date:       cellDate_(get_(r, idx, 'วันที่')),
+      timeIn:     cellTime_(get_(r, idx, 'เวลาเข้า')),
+      locationId: String(get_(r, idx, 'รหัสหน่วยงาน')).trim(),
+      location:   String(get_(r, idx, 'หน่วยงาน')).trim(),
+      photoIn:    String(get_(r, idx, 'รูปเช็คอิน')).trim(),
+      startIso:   cellIso_(get_(r, idx, 'เข้าเมื่อ'))
     });
   }
   out.sort(function (a, b) { return (b.startIso || '').localeCompare(a.startIso || ''); });
@@ -719,6 +722,34 @@ function nextLocId_(sheet, idx) {
 function requirePin_(pin) {
   if (String(pin || '') !== ADMIN_PIN) throw new Error('รหัสผ่านไม่ถูกต้อง');
 }
+
+/**
+ * Google Sheet แปลงข้อความที่ดูเหมือนวันที่/เวลาให้กลายเป็นค่า Date อัตโนมัติ
+ * เวลาอ่านกลับมาจึงได้ object Date แทนข้อความที่เขียนลงไป
+ * ("28/08/2026" → Fri Aug 28 2026 ..., "16:04" → Sat Dec 30 1899 16:04)
+ * สามฟังก์ชันนี้แปลงกลับเป็นข้อความให้ตรงกับที่ตั้งใจเก็บไว้
+ */
+function cellDate_(v) {
+  if (isDate_(v)) return zz_(v.getDate()) + '/' + zz_(v.getMonth() + 1) + '/' + v.getFullYear();
+  return String(v == null ? '' : v).trim();
+}
+
+function cellTime_(v) {
+  if (isDate_(v)) return zz_(v.getHours()) + ':' + zz_(v.getMinutes());
+  return String(v == null ? '' : v).trim();
+}
+
+function cellIso_(v) {
+  if (isDate_(v)) return v.toISOString();
+  return String(v == null ? '' : v).trim();
+}
+
+/** ตรวจว่าเป็น Date จริงไหม — ใช้ toString แทน instanceof เพื่อไม่พึ่ง realm เดียวกัน */
+function isDate_(v) {
+  return Object.prototype.toString.call(v) === '[object Date]' && !isNaN(v.getTime());
+}
+
+function zz_(n) { return ('0' + n).slice(-2); }
 
 /** รหัสพนักงานอาจถูกชีตแปลงเป็นตัวเลข ("0123" → 123) จึงตัดช่องว่างและ .0 ทิ้ง */
 function normCode_(v) {
