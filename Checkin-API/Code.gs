@@ -78,6 +78,9 @@ var HEAD_AUDIT = [
   'ผลรายข้อ(JSON)', 'ปกติ(ข้อ)', 'ปรับปรุง(ข้อ)', 'ปัญหา/ข้อเสนอแนะ', 'บันทึกเมื่อ'
 ];
 
+/** คอลัมน์เสริมใน SurveyLog — ลิงก์รูปลายเซ็นลูกค้า */
+var COL_SURVEY_SIGN = 'ลายเซ็นผู้ประเมิน';
+
 var ST_SURVEY_OK   = 'ประเมินแล้ว';
 var ST_SURVEY_SKIP = 'ลูกค้าไม่สะดวก';
 
@@ -569,7 +572,7 @@ function readFormConfig_() {
 /** เดือนนี้หน่วยนี้ทำแบบตรวจมาตรฐานแล้วหรือยัง */
 function auditDoneMonth_(locationId, month) {
   return scanLog_(SH_AUDIT, HEAD_AUDIT, function (r, idx) {
-    return String(get_(r, idx, 'เดือน')).trim() === month &&
+    return cellMonth_(get_(r, idx, 'เดือน')) === month &&
            String(get_(r, idx, 'รหัสหน่วยงาน')).trim() === locationId;
   }).length > 0;
 }
@@ -577,7 +580,7 @@ function auditDoneMonth_(locationId, month) {
 /** เดือนนี้หน่วยนี้มีผลประเมินพึงพอใจ (ที่ลูกค้าประเมินจริง) แล้วหรือยัง */
 function surveyDoneMonth_(locationId, month) {
   return scanLog_(SH_SURVEY, HEAD_SURVEY, function (r, idx) {
-    return String(get_(r, idx, 'เดือน')).trim() === month &&
+    return cellMonth_(get_(r, idx, 'เดือน')) === month &&
            String(get_(r, idx, 'รหัสหน่วยงาน')).trim() === locationId &&
            String(get_(r, idx, 'สถานะ')).trim() === ST_SURVEY_OK;
   }).length > 0;
@@ -729,6 +732,10 @@ function apiSubmitSurvey_(d) {
     put_(row, idx, 'ข้อเสนอแนะ',           String(d.comment || '').trim());
     put_(row, idx, 'เหตุผลไม่สะดวก',        String(d.reason || '').trim());
     put_(row, idx, 'บันทึกเมื่อ',           now.toISOString());
+    if (d.signature && d.signature.data) {
+      put_(row, idx, COL_SURVEY_SIGN,
+           savePhoto_(d.signature, 'SIGN_' + loc.id + '_' + fmt_(now, 'yyyyMMdd_HHmmss'), 'image/png'));
+    }
     sheet.appendRow(row);
 
     return {
@@ -810,14 +817,14 @@ function apiExportForms_(p) {
   }
 
   var match = function (r, idx) {
-    if (String(get_(r, idx, 'เดือน')).trim() !== month) return false;
+    if (cellMonth_(get_(r, idx, 'เดือน')) !== month) return false;
     return !locId || String(get_(r, idx, 'รหัสหน่วยงาน')).trim() === locId;
   };
 
   return {
     ok: true, month: month,
     forms:   readFormConfig_(),
-    surveys: pick(scanLog_(SH_SURVEY, HEAD_SURVEY, match), HEAD_SURVEY),
+    surveys: pick(scanLog_(SH_SURVEY, HEAD_SURVEY, match), HEAD_SURVEY.concat([COL_SURVEY_SIGN])),
     audits:  pick(scanLog_(SH_AUDIT,  HEAD_AUDIT,  match), HEAD_AUDIT),
     locations: readLocations_(false)
   };
@@ -1003,10 +1010,11 @@ function requireFix_(d) {
 // ===================== รูปภาพ =====================
 
 /** อัปโหลดรูป base64 ขึ้น Drive แล้วคืนลิงก์ */
-function savePhoto_(photo, baseName) {
+function savePhoto_(photo, baseName, mime) {
+  var type   = mime || photo.mimeType || 'image/jpeg';
   var bytes  = Utilities.base64Decode(photo.data);
-  var name   = baseName + '.jpg';
-  var blob   = Utilities.newBlob(bytes, photo.mimeType || 'image/jpeg', name);
+  var name   = baseName + (type === 'image/png' ? '.png' : '.jpg');
+  var blob   = Utilities.newBlob(bytes, type, name);
   var folder = getPhotoFolder_();
   var file   = folder.createFile(blob);
   try {
@@ -1136,6 +1144,12 @@ function cellIso_(v) {
   return String(v == null ? '' : v).trim();
 }
 
+/** คีย์เดือน "yyyy-MM" — ชีตแปลง "2026-09" เป็นวันที่ จึงต้องแปลงกลับก่อนเทียบ */
+function cellMonth_(v) {
+  if (isDate_(v)) return v.getFullYear() + '-' + zz_(v.getMonth() + 1);
+  return String(v == null ? '' : v).trim();
+}
+
 /** ตรวจว่าเป็น Date จริงไหม — ใช้ toString แทน instanceof เพื่อไม่พึ่ง realm เดียวกัน */
 function isDate_(v) {
   return Object.prototype.toString.call(v) === '[object Date]' && !isNaN(v.getTime());
@@ -1232,7 +1246,7 @@ function setup() {
     ['survey', 9,  '', 'ความสม่ำเสมอในการเข้าตรวจสอบของบริษัทฯ', 'ใช้งาน'],
     ['survey', 10, '', 'ความสามารถในการดำเนินงานตามระบบ ISO', 'ใช้งาน']
   ]);
-  ensureSheet_(ss, SH_SURVEY, HEAD_SURVEY, []);
+  ensureSheet_(ss, SH_SURVEY, HEAD_SURVEY.concat([COL_SURVEY_SIGN]), []);
   ensureSheet_(ss, SH_AUDIT,  HEAD_AUDIT,  []);
 
   // ลบแท็บเปล่าที่ Google สร้างมาให้ตอนสร้างไฟล์ใหม่

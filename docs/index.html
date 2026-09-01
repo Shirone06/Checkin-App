@@ -318,6 +318,16 @@
       </div>
     </div>
 
+    <div class="card">
+      <div class="q">ลายเซ็นผู้ประเมิน <span class="req">*</span></div>
+      <div class="hint" style="margin-bottom:10px">เซ็นด้วยนิ้วในกรอบด้านล่าง</div>
+      <div class="signwrap">
+        <canvas id="svSign" class="signpad"></canvas>
+        <div class="signline"></div>
+      </div>
+      <button type="button" class="btn gray sm mt" id="btnSignClear">🔄 เซ็นใหม่</button>
+    </div>
+
     <button class="btn" id="btnSvSubmit" disabled>ส่งแบบประเมิน</button>
     <div class="hint mt center" id="svProgress"></div>
     <div class="center mt">
@@ -1107,8 +1117,10 @@ document.getElementById('btnSvStart').onclick = function () {
         };
       });
 
-      renderSvReady();
       show('scSvForm');
+      Sign.init();     // ต้องเรียกหลังหน้าแสดงผลแล้ว canvas ถึงจะรู้ขนาดจริง
+      Sign.clear();
+      renderSvReady();
     })
     .catch(function (e) { show('scSvIntro'); setErr('svErr', e.message); });
 };
@@ -1116,10 +1128,100 @@ document.getElementById('btnSvStart').onclick = function () {
 function renderSvReady() {
   var total = S.formCfg.survey.length;
   var done = Object.keys(S.svScores).length;
-  document.getElementById('btnSvSubmit').disabled = done < total;
+  var signed = Sign.hasInk();
+  document.getElementById('btnSvSubmit').disabled = done < total || !signed;
+
   document.getElementById('svProgress').textContent =
-    done < total ? 'ให้คะแนนแล้ว ' + done + '/' + total + ' ข้อ' : 'ครบทุกข้อแล้ว — กดส่งแบบประเมินได้เลย';
+    done < total ? 'ให้คะแนนแล้ว ' + done + '/' + total + ' ข้อ'
+    : !signed    ? 'ให้คะแนนครบแล้ว — เหลือเซ็นชื่อด้านล่าง'
+                 : 'ครบแล้ว — กดส่งแบบประเมินได้เลย';
 }
+
+// ---------- ช่องเซ็นชื่อ ----------
+var Sign = {
+  cv: null, ctx: null, drawing: false, inked: false,
+
+  init: function () {
+    var cv = document.getElementById('svSign');
+    // กำหนดขนาดจาก JS ไม่พึ่ง CSS — ถ้าสไตล์ชีตยังเป็นไฟล์เก่าที่แคชไว้
+    // canvas จะกางเกินจอจนใช้งานไม่ได้
+    var ratio = window.devicePixelRatio || 1;
+    var w = Math.max(240, cv.parentNode.clientWidth);
+    var h = 180;
+    cv.style.width  = w + 'px';
+    cv.style.height = h + 'px';
+    cv.style.background = '#fff';
+    cv.style.borderRadius = '10px';
+    cv.style.touchAction = 'none';
+    cv.width  = w * ratio;
+    cv.height = h * ratio;
+
+    var ctx = cv.getContext('2d');
+    ctx.scale(ratio, ratio);
+    ctx.lineWidth = 2.2;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#1a2340';
+
+    this.cv = cv; this.ctx = ctx; this.inked = false;
+
+    if (this.bound) return;
+    this.bound = true;
+    var self = this;
+
+    function pos(e) {
+      var r = cv.getBoundingClientRect();
+      var p = (e.touches && e.touches[0]) || e;
+      return { x: p.clientX - r.left, y: p.clientY - r.top };
+    }
+    function start(e) {
+      e.preventDefault();
+      self.drawing = true;
+      var p = pos(e);
+      self.ctx.beginPath();
+      self.ctx.moveTo(p.x, p.y);
+    }
+    function move(e) {
+      if (!self.drawing) return;
+      e.preventDefault();
+      var p = pos(e);
+      self.ctx.lineTo(p.x, p.y);
+      self.ctx.stroke();
+      if (!self.inked) { self.inked = true; renderSvReady(); }
+    }
+    function end() { self.drawing = false; }
+
+    cv.addEventListener('mousedown', start);
+    cv.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', end);
+    cv.addEventListener('touchstart', start, { passive: false });
+    cv.addEventListener('touchmove', move, { passive: false });
+    cv.addEventListener('touchend', end);
+  },
+
+  clear: function () {
+    if (!this.ctx) return;
+    this.ctx.clearRect(0, 0, this.cv.width, this.cv.height);
+    this.inked = false;
+    renderSvReady();
+  },
+
+  hasInk: function () { return this.inked; },
+
+  /** คืนรูปลายเซ็น PNG พื้นขาว (base64) */
+  data: function () {
+    if (!this.inked) return null;
+    var out = document.createElement('canvas');
+    out.width = this.cv.width; out.height = this.cv.height;
+    var c = out.getContext('2d');
+    c.fillStyle = '#ffffff';
+    c.fillRect(0, 0, out.width, out.height);
+    c.drawImage(this.cv, 0, 0);
+    return out.toDataURL('image/png').split(',')[1];
+  }
+};
+
+document.getElementById('btnSignClear').onclick = function () { Sign.clear(); };
 
 /** ออกจากโหมดลูกค้า ต้องใส่รหัสพนักงาน QA */
 function svExit(target) {
@@ -1145,7 +1247,8 @@ document.getElementById('btnSvSubmit').onclick = function () {
     area: document.getElementById('svArea').value.trim(),
     totalStaff: document.getElementById('svTotal').value.trim(),
     heads: document.getElementById('svHeads').value.trim(),
-    workers: document.getElementById('svWorkers').value.trim()
+    workers: document.getElementById('svWorkers').value.trim(),
+    signature: Sign.data() ? { data: Sign.data(), mimeType: 'image/png' } : null
   })
   .then(function (res) {
     S.duty[S.coLog.locationId] = res.duty;

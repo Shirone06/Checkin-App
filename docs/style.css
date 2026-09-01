@@ -177,3 +177,15 @@ input[type=file] { display: none; }
 .tag.live { background: rgba(72, 187, 120, .18); color: #9ae6b4; }
 .tag.done { background: rgba(66, 153, 225, .15); color: #bee3f8; }
 .tag.miss { background: rgba(237, 137, 54, .18); color: #fbd38d; }
+
+/* ---- ช่องเซ็นชื่อ (แบบประเมินพึงพอใจ) ---- */
+.signwrap { position: relative; }
+.signpad {
+  width: 100%; height: 180px; display: block;
+  background: #fff; border: 1px solid #3a4060; border-radius: 10px;
+  touch-action: none; cursor: crosshair;
+}
+.signline {
+  position: absolute; left: 8%; right: 8%; bottom: 42px;
+  border-bottom: 1px dashed #b9c2cf; pointer-events: none;
+}

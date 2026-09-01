@@ -565,7 +565,7 @@ function openFormPrint(data, month, onlyLoc) {
     '.lines div{border-bottom:1px dotted #888;height:22px;line-height:22px;font-size:13px}' +
     '.sig{display:flex;justify-content:space-around;margin-top:26px;text-align:center;font-size:13px}' +
     '.sig div{width:42%}' +
-    '.sigline{border-bottom:1px dotted #000;height:26px;margin-bottom:5px}' +
+    '.sigline{border-bottom:1px dotted #000;height:8px;margin-bottom:5px}' +
     '.empty{border:1px dashed #999;text-align:center;padding:34px 10px;color:#555;font-size:15px;margin-bottom:10px}' +
     '.meta{font-size:12px;color:#444;margin-bottom:8px}' +
     '</style>';
@@ -694,9 +694,17 @@ function surveyPage(loc, row, skips, questions, month) {
   for (var c = 0; c < Math.max(2, cm.length); c++) html += '<div>' + esc(cm[c] || '') + '</div>';
   html += '</div>';
 
+  // ลายเซ็นลูกค้า: ถ้ามีรูปให้วางทับเส้นเซ็น
+  var signUrl = driveThumb(row['ลายเซ็นผู้ประเมิน']);
+  var signImg = signUrl
+    ? '<img src="' + signUrl + '" alt="ลายเซ็น" style="max-height:52px;max-width:100%;display:block;margin:0 auto -6px">'
+    : '';
+
   html += '<div class="sig">' +
-    '<div><div class="sigline"></div>ผู้ประเมิน (ผู้ว่าจ้าง)<br>' + esc(row['ผู้ประเมิน'] || '') + '</div>' +
-    '<div><div class="sigline"></div>เจ้าหน้าที่ควบคุมคุณภาพ (QA)<br>' + esc(row['ชื่อQA']) + '</div>' +
+    '<div>' + (signImg || '<div style="height:46px"></div>') +
+      '<div class="sigline"></div>ผู้ประเมิน (ผู้ว่าจ้าง)<br>' + esc(row['ผู้ประเมิน'] || '') + '</div>' +
+    '<div><div style="height:46px"></div><div class="sigline"></div>' +
+      'เจ้าหน้าที่ควบคุมคุณภาพ (QA)<br>' + esc(row['ชื่อQA']) + '</div>' +
     '</div></div>';
   return html;
 }
