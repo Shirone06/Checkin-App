@@ -81,6 +81,10 @@ var HEAD_AUDIT = [
 /** คอลัมน์เสริมใน SurveyLog — ลิงก์รูปลายเซ็นลูกค้า */
 var COL_SURVEY_SIGN = 'ลายเซ็นผู้ประเมิน';
 
+/** คอลัมน์เสริมใน AuditLog — ลายเซ็นผู้รับรองข้อมูล (QA) และผู้ว่าจ้าง */
+var COL_AUDIT_SIGN_QA  = 'ลายเซ็นQA';
+var COL_AUDIT_SIGN_EMP = 'ลายเซ็นผู้ว่าจ้าง';
+
 var ST_SURVEY_OK   = 'ประเมินแล้ว';
 var ST_SURVEY_SKIP = 'ลูกค้าไม่สะดวก';
 
@@ -661,6 +665,14 @@ function apiSubmitAudit_(d) {
     put_(row, idx, 'ปรับปรุง(ข้อ)',        improves);
     put_(row, idx, 'ปัญหา/ข้อเสนอแนะ',     String(d.issues || '').trim());
     put_(row, idx, 'บันทึกเมื่อ',           now.toISOString());
+
+    var stamp = loc.id + '_' + fmt_(now, 'yyyyMMdd_HHmmss');
+    if (d.signatureQa && d.signatureQa.data) {
+      put_(row, idx, COL_AUDIT_SIGN_QA,  savePhoto_(d.signatureQa,  'SIGNQA_'  + stamp, 'image/png'));
+    }
+    if (d.signatureEmp && d.signatureEmp.data) {
+      put_(row, idx, COL_AUDIT_SIGN_EMP, savePhoto_(d.signatureEmp, 'SIGNEMP_' + stamp, 'image/png'));
+    }
     sheet.appendRow(row);
 
     return {
@@ -825,7 +837,8 @@ function apiExportForms_(p) {
     ok: true, month: month,
     forms:   readFormConfig_(),
     surveys: pick(scanLog_(SH_SURVEY, HEAD_SURVEY, match), HEAD_SURVEY.concat([COL_SURVEY_SIGN])),
-    audits:  pick(scanLog_(SH_AUDIT,  HEAD_AUDIT,  match), HEAD_AUDIT),
+    audits:  pick(scanLog_(SH_AUDIT,  HEAD_AUDIT,  match),
+                      HEAD_AUDIT.concat([COL_AUDIT_SIGN_QA, COL_AUDIT_SIGN_EMP])),
     locations: readLocations_(false)
   };
 }
@@ -1247,7 +1260,7 @@ function setup() {
     ['survey', 10, '', 'ความสามารถในการดำเนินงานตามระบบ ISO', 'ใช้งาน']
   ]);
   ensureSheet_(ss, SH_SURVEY, HEAD_SURVEY.concat([COL_SURVEY_SIGN]), []);
-  ensureSheet_(ss, SH_AUDIT,  HEAD_AUDIT,  []);
+  ensureSheet_(ss, SH_AUDIT,  HEAD_AUDIT.concat([COL_AUDIT_SIGN_QA, COL_AUDIT_SIGN_EMP]), []);
 
   // ลบแท็บเปล่าที่ Google สร้างมาให้ตอนสร้างไฟล์ใหม่
   var blank = ss.getSheetByName('Sheet1') || ss.getSheetByName('ชีต1');

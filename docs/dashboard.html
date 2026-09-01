@@ -549,48 +549,95 @@ function openFormPrint(data, month, onlyLoc) {
 
   var css =
     '<style>' +
-    '@page{size:A4;margin:14mm}' +
+    '@page{size:A4;margin:12mm 13mm}' +
     '*{margin:0;padding:0;box-sizing:border-box}' +
-    'body{font-family:"Sarabun","TH Sarabun New",sans-serif;font-size:13.5px;color:#000;background:#fff}' +
-    '.page{page-break-after:always;padding:4px 0}' +
+    // Noto Sans Thai วางสระ/วรรณยุกต์ได้ครบกว่าฟอนต์สำรองของระบบ กัน "สระตก"
+    'body{font-family:"Sarabun","Noto Sans Thai","TH Sarabun New",sans-serif;' +
+      'font-size:13px;line-height:1.45;color:#000;background:#fff;' +
+      '-webkit-print-color-adjust:exact;print-color-adjust:exact}' +
+    '.page{page-break-after:always}' +
     '.page:last-child{page-break-after:auto}' +
-    'h1{font-size:17px;text-align:center;margin-bottom:2px}' +
-    '.sub{text-align:center;font-size:13.5px;margin-bottom:10px}' +
-    'table{width:100%;border-collapse:collapse;margin-bottom:10px}' +
-    'th,td{border:1px solid #000;padding:5px 7px;text-align:left;vertical-align:top}' +
-    'th{background:#eee;font-weight:600;text-align:center}' +
+
+    '.code{text-align:right;font-size:11px;letter-spacing:.3px;margin-bottom:2px}' +
+    'h1{font-size:18px;text-align:center;font-weight:700;letter-spacing:.2px}' +
+    '.org{text-align:center;font-size:14px;margin-top:3px}' +
+    '.period{text-align:center;font-size:13.5px;margin:4px 0 12px}' +
+
+    'table{width:100%;border-collapse:collapse;margin-bottom:9px}' +
+    'th,td{border:1px solid #000;padding:4px 7px;text-align:left;vertical-align:middle}' +
+    'th{background:#ececec;font-weight:600;text-align:center;font-size:12.5px}' +
+    'th.grp{font-size:11.5px;white-space:nowrap;padding:3px 2px}' +
+    'th.num{width:24px;font-size:11.5px;padding:3px 1px}' +
+    '.info td{border:1px solid #000;padding:5px 8px;font-size:13px}' +
     '.c{text-align:center}.b{font-weight:700}' +
-    '.mark{font-size:15px;font-weight:700}' +
-    '.lines{margin:8px 0 14px}' +
-    '.lines div{border-bottom:1px dotted #888;height:22px;line-height:22px;font-size:13px}' +
-    '.sig{display:flex;justify-content:space-around;margin-top:26px;text-align:center;font-size:13px}' +
-    '.sig div{width:42%}' +
-    '.sigline{border-bottom:1px dotted #000;height:8px;margin-bottom:5px}' +
-    '.empty{border:1px dashed #999;text-align:center;padding:34px 10px;color:#555;font-size:15px;margin-bottom:10px}' +
-    '.meta{font-size:12px;color:#444;margin-bottom:8px}' +
+    '.mark{font-size:14px;font-weight:700;line-height:1}' +
+    '.sec td{background:#f4f4f4;font-weight:700;font-size:12.5px}' +
+    '.note{font-size:11.5px;color:#333}' +
+
+    '.label{font-weight:700;margin:10px 0 4px;font-size:13px}' +
+    '.lines div{border-bottom:1px dotted #666;min-height:20px;line-height:20px;font-size:12.5px}' +
+    '.para{font-size:12.5px;margin:8px 0;text-indent:22px;line-height:1.6}' +
+    '.certify{text-align:right;font-size:12.5px;margin:6px 0 2px}' +
+
+    '.sig{display:flex;justify-content:space-around;margin-top:16px;text-align:center;font-size:12.5px}' +
+    '.sig .col{width:44%}' +
+    '.sigimg{height:46px;display:flex;align-items:flex-end;justify-content:center}' +
+    '.sigimg img{max-height:46px;max-width:100%}' +
+    '.sigline{border-bottom:1px dotted #000;margin-bottom:4px}' +
+    '.signame{min-height:17px}' +
+    '.sigdate{font-size:12px;color:#333;margin-top:2px}' +
+
+    '.empty{border:1px dashed #888;text-align:center;padding:30px 10px;color:#555;font-size:14px;margin-bottom:8px}' +
+    '.meta{font-size:11.5px;color:#444;margin-bottom:6px}' +
     '</style>';
 
   var w = window.open('', '_blank');
   if (!w) return alert('เบราว์เซอร์บล็อกป๊อปอัป — กรุณาอนุญาตป๊อปอัปสำหรับเว็บนี้แล้วลองใหม่');
   w.document.write('<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8">' +
     '<title>แบบประเมิน ' + esc(thaiMonth(month)) + '</title>' +
-    '<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">' +
+    '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>' +
+    '<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700' +
+      '&family=Noto+Sans+Thai:wght@400;600;700&display=swap" rel="stylesheet">' +
     css + '</head><body>' + pages +
-    '<script>window.onload=function(){setTimeout(function(){window.print();},400);};<\/script>' +
+    // รอให้ฟอนต์ไทยและรูปลายเซ็นโหลดจบก่อนสั่งพิมพ์ ไม่งั้นจะได้ฟอนต์สำรอง
+    // ที่วางสระเพี้ยน และช่องลายเซ็นว่าง
+    '<script>' +
+    'function go(){setTimeout(function(){window.print();},250);}' +
+    'var imgs=[].slice.call(document.images).filter(function(i){return !i.complete;});' +
+    'var left=imgs.length;' +
+    'function tick(){if(--left<=0)ready();}' +
+    'imgs.forEach(function(i){i.addEventListener("load",tick);i.addEventListener("error",tick);});' +
+    'function ready(){(document.fonts&&document.fonts.ready?document.fonts.ready:Promise.resolve()).then(go);}' +
+    'if(!imgs.length)ready();' +
+    'setTimeout(function(){if(left>0){left=0;ready();}},6000);' +   // กันรูปโหลดค้าง
+    '<\/script>' +
     '</body></html>');
   w.document.close();
 }
 
-/** หน้าแบบตรวจมาตรฐานการปฏิบัติงาน */
+/** บล็อกลายเซ็น 1 ช่อง — มีรูปก็วางรูป ไม่มีก็เว้นที่ให้เซ็นบนกระดาษ */
+function sigCol(url, caption, name, dateText) {
+  var thumb = driveThumb(url);
+  return '<div class="col">' +
+    '<div class="sigimg">' + (thumb ? '<img src="' + thumb + '" alt="ลายเซ็น">' : '') + '</div>' +
+    '<div class="sigline"></div>' +
+    '<div>' + esc(caption) + '</div>' +
+    '<div class="signame">' + esc(name || '') + '</div>' +
+    (dateText ? '<div class="sigdate">วันที่ ' + esc(dateText) + '</div>' : '') +
+  '</div>';
+}
+
+/** หน้าแบบตรวจมาตรฐานการปฏิบัติงานประจำหน่วยงาน */
 function auditPage(loc, row, questions, month) {
   var head =
     '<div class="page">' +
     '<h1>แบบตรวจมาตรฐานการปฏิบัติงานประจำหน่วยงาน</h1>' +
-    '<div class="sub">' + esc(ORG_NAME) + ' · ประจำเดือน ' + esc(thaiMonth(month)) + '</div>';
+    '<div class="org">' + esc(ORG_NAME) + '</div>' +
+    '<div class="period">ประจำเดือน ' + esc(thaiMonth(month)) + '</div>';
 
   if (!row) {
     return head + '<div class="empty">— ยังไม่ได้ตรวจประเมินในเดือนนี้ —<br>' +
-      '<span style="font-size:13px">หน่วยงาน: ' + esc(loc.name) + '</span></div></div>';
+      '<span style="font-size:12.5px">หน่วยงาน: ' + esc(loc.name) + '</span></div></div>';
   }
 
   var parsed = {};
@@ -598,50 +645,57 @@ function auditPage(loc, row, questions, month) {
   var answers = parsed.answers || {}, remarks = parsed.remarks || {};
 
   var html = head +
-    '<table><tr>' +
-    '<td style="width:50%"><b>ผู้ตรวจสอบ(QA):</b> ' + esc(row['ชื่อQA']) + '</td>' +
-    '<td><b>วันที่:</b> ' + esc(row['วันที่']) + ' &nbsp; <b>เวลา:</b> ' + esc(row['เวลา']) + ' น.</td></tr>' +
-    '<tr><td><b>จำนวนพนักงานประจำจุด:</b> ' + esc(row['จำนวนพนักงานประจำจุด'] || '-') + '</td>' +
-    '<td><b>หน่วยงาน:</b> ' + esc(loc.name) + '</td></tr>' +
-    '<tr><td><b>ผู้ประสานงานหน้างาน:</b> ' + esc(row['ผู้ประสานงานหน้างาน'] || '-') + '</td>' +
-    '<td><b>ผู้ว่าจ้าง:</b> ' + esc(row['ผู้ว่าจ้าง'] || '-') + '</td></tr></table>' +
+    '<table class="info">' +
+      '<tr><td style="width:52%"><b>ผู้ตรวจสอบ (QA):</b> ' + esc(row['ชื่อQA']) + '</td>' +
+        '<td><b>วันที่:</b> ' + esc(row['วันที่']) +
+        ' &nbsp;&nbsp; <b>เวลา:</b> ' + esc(row['เวลา']) + ' น.</td></tr>' +
+      '<tr><td><b>จำนวนพนักงานประจำจุด:</b> ' + esc(row['จำนวนพนักงานประจำจุด'] || '-') + '</td>' +
+        '<td><b>หน่วยงาน:</b> ' + esc(loc.name) + '</td></tr>' +
+      '<tr><td><b>ผู้ประสานงานหน้างาน:</b> ' + esc(row['ผู้ประสานงานหน้างาน'] || '-') + '</td>' +
+        '<td><b>ผู้ว่าจ้าง:</b> ' + esc(row['ผู้ว่าจ้าง'] || '-') + '</td></tr>' +
+    '</table>' +
 
-    '<table><tr><th style="text-align:left">รายการตรวจ</th>' +
-    '<th style="width:52px">ปกติ</th><th style="width:62px">ปรับปรุง</th><th style="width:30%">หมายเหตุ</th></tr>';
+    '<div class="label">รายการตรวจ <span style="font-weight:400">(ทำเครื่องหมาย ✓)</span></div>' +
+    '<table><tr>' +
+      '<th style="text-align:left">หัวข้อ</th>' +
+      '<th style="width:50px">ปกติ</th><th style="width:60px">ปรับปรุง</th>' +
+      '<th style="width:31%">หมายเหตุ</th></tr>';
 
   var lastSection = null;
   questions.forEach(function (q) {
     if (q.section && q.section !== lastSection) {
-      html += '<tr><td colspan="4" class="b" style="background:#f3f3f3">หัวข้อ: ' + esc(q.section) + '</td></tr>';
+      html += '<tr class="sec"><td colspan="4">หัวข้อ: ' + esc(q.section) + '</td></tr>';
       lastSection = q.section;
     }
     var a = answers[q.order] || '';
     html += '<tr><td>' + esc(q.question) + '</td>' +
       '<td class="c mark">' + (a === 'ปกติ' ? '✓' : '') + '</td>' +
       '<td class="c mark">' + (a === 'ปรับปรุง' ? '✗' : '') + '</td>' +
-      '<td>' + esc(remarks[q.order] || '') + '</td></tr>';
+      '<td class="note">' + esc(remarks[q.order] || '') + '</td></tr>';
   });
   html += '</table>';
 
-  html += '<div class="b">ปัญหาที่พบ / ข้อเสนอแนะ และแนวทางแก้ไข</div><div class="lines">';
+  html += '<div class="label">ปัญหาที่พบ / ข้อเสนอแนะ และแนวทางแก้ไข</div><div class="lines">';
   var issues = String(row['ปัญหา/ข้อเสนอแนะ'] || '').split('\n');
   for (var i = 0; i < Math.max(3, issues.length); i++) html += '<div>' + esc(issues[i] || '') + '</div>';
   html += '</div>';
 
+  html += '<div class="certify">ขอรับรองว่าข้อความดังกล่าวข้างต้นเป็นความจริงทุกประการ</div>';
   html += '<div class="sig">' +
-    '<div><div class="sigline"></div>ผู้รับรองข้อมูล (QA)<br>' + esc(row['ชื่อQA']) + ' · ' + esc(row['วันที่']) + '</div>' +
-    '<div><div class="sigline"></div>ผู้ว่าจ้าง<br>' + esc(row['ผู้ว่าจ้าง'] || '') + '</div>' +
-    '</div></div>';
+    sigCol(row['ลายเซ็นQA'], 'ผู้รับรองข้อมูล (QA)', row['ชื่อQA'], row['วันที่']) +
+    sigCol(row['ลายเซ็นผู้ว่าจ้าง'], 'ผู้ว่าจ้าง', row['ผู้ว่าจ้าง'], row['วันที่']) +
+  '</div></div>';
   return html;
 }
 
-/** หน้าแบบประเมินความพึงพอใจ */
+/** หน้าแบบประเมินความพึงพอใจการบริการทำความสะอาด (FM-OP04-03 REV.03) */
 function surveyPage(loc, row, skips, questions, month) {
   var head =
     '<div class="page">' +
+    '<div class="code">FM-OP04-03 REV.03</div>' +
+    '<div class="org">' + esc(ORG_NAME) + '</div>' +
     '<h1>แบบประเมินความพึงพอใจการบริการทำความสะอาด</h1>' +
-    '<div class="sub">' + esc(ORG_NAME) + ' · ประจำเดือน ' + esc(thaiMonth(month)) +
-    ' <span style="float:right;font-size:11px">FM-OP04-03 REV.03</span></div>';
+    '<div class="period">ประจำเดือน ' + esc(thaiMonth(month)) + '</div>';
 
   if (!row) {
     var note = skips.length
@@ -649,25 +703,33 @@ function surveyPage(loc, row, skips, questions, month) {
         esc(skips.map(function (s) { return s['วันที่'] + ' (' + s['เหตุผลไม่สะดวก'] + ')'; }).join(' · ')) + '</div>'
       : '';
     return head + '<div class="empty">— ลูกค้ายังไม่ได้ประเมินในเดือนนี้ —<br>' +
-      '<span style="font-size:13px">หน่วยงาน: ' + esc(loc.name) + '</span></div>' + note + '</div>';
+      '<span style="font-size:12.5px">หน่วยงาน: ' + esc(loc.name) + '</span></div>' + note + '</div>';
   }
 
   var scores = {};
   try { scores = JSON.parse(row['คะแนนรายข้อ(JSON)'] || '{}'); } catch (e) {}
 
   var html = head +
-    '<table><tr>' +
-    '<td style="width:55%"><b>หน่วยงาน:</b> ' + esc(loc.name) +
-    (row['พื้นที่/อาคาร/ชั้น'] ? ' · ' + esc(row['พื้นที่/อาคาร/ชั้น']) : '') + '</td>' +
-    '<td><b>วันที่ประเมิน:</b> ' + esc(row['วันที่']) + '</td></tr>' +
-    '<tr><td><b>ผู้ประเมิน (ผู้ว่าจ้าง):</b> ' + esc(row['ผู้ประเมิน'] || '-') +
-    (row['ตำแหน่งผู้ประเมิน'] ? ' · ' + esc(row['ตำแหน่งผู้ประเมิน']) : '') + '</td>' +
-    '<td><b>พนักงานทั้งหมด:</b> ' + esc(row['จำนวนพนักงานทั้งหมด'] || '-') +
-    ' คน (หัวหน้า ' + esc(row['หัวหน้างาน(คน)'] || '-') + ' / พนักงาน ' + esc(row['พนักงาน(คน)'] || '-') + ')</td></tr></table>';
+    '<table class="info">' +
+      '<tr><td style="width:60%"><b>หน่วยงาน:</b> ' + esc(loc.name) + '</td>' +
+        '<td><b>พื้นที่ / อาคาร / ชั้น:</b> ' + esc(row['พื้นที่/อาคาร/ชั้น'] || '-') + '</td></tr>' +
+      '<tr><td><b>ชื่อ-นามสกุล (ผู้ว่าจ้าง):</b> ' + esc(row['ผู้ประเมิน'] || '-') + '</td>' +
+        '<td><b>จำนวนพนักงานทั้งหมด:</b> ' + esc(row['จำนวนพนักงานทั้งหมด'] || '-') + ' คน</td></tr>' +
+      '<tr><td><b>ตำแหน่ง:</b> ' + esc(row['ตำแหน่งผู้ประเมิน'] || '-') + '</td>' +
+        '<td><b>หัวหน้างาน</b> ' + esc(row['หัวหน้างาน(คน)'] || '-') + ' คน &nbsp; ' +
+        '<b>พนักงาน</b> ' + esc(row['พนักงาน(คน)'] || '-') + ' คน</td></tr>' +
+    '</table>' +
 
-  html += '<table><tr><th rowspan="2" style="width:34px">ลำดับ</th><th rowspan="2" style="text-align:left">รายละเอียด</th>' +
-    '<th colspan="4">ปรับปรุง (1-4)</th><th colspan="3">พอใช้ (5-7)</th><th colspan="3">ดี (8-10)</th></tr><tr>';
-  for (var s = 1; s <= 10; s++) html += '<th style="width:34px">' + s + '</th>';
+    '<div class="para">ขอความกรุณาให้คะแนนความพึงพอใจตามระดับความพึงพอใจที่ท่านได้รับ ' +
+    '(ตั้งแต่ 1 - 10 คะแนน) โดยทำเครื่องหมาย ✓ ในช่องที่ต้องการ</div>';
+
+  html += '<table><tr>' +
+    '<th rowspan="2" style="width:34px">ลำดับ</th>' +
+    '<th rowspan="2" style="text-align:left;width:38%">รายละเอียด</th>' +
+    '<th colspan="4" class="grp">ปรับปรุง (1 ถึง 4)</th>' +
+    '<th colspan="3" class="grp">พอใช้ (5 ถึง 7)</th>' +
+    '<th colspan="3" class="grp">ดี (8 ถึง 10)</th></tr><tr>';
+  for (var s = 1; s <= 10; s++) html += '<th class="num">' + s + '</th>';
   html += '</tr>';
 
   var bands = { low: 0, mid: 0, high: 0 }, total = 0;
@@ -676,36 +738,35 @@ function surveyPage(loc, row, skips, questions, month) {
     total += sc;
     if (sc >= 8) bands.high += sc; else if (sc >= 5) bands.mid += sc; else bands.low += sc;
     html += '<tr><td class="c">' + q.order + '</td><td>' + esc(q.question) + '</td>';
-    for (var i = 1; i <= 10; i++) {
-      html += '<td class="c mark">' + (i === sc ? '✓' : '') + '</td>';
-    }
+    for (var i = 1; i <= 10; i++) html += '<td class="c mark">' + (i === sc ? '✓' : '') + '</td>';
     html += '</tr>';
   });
 
   html += '<tr><td colspan="2" class="b">รวมคะแนนในแต่ละส่วน (ปรับปรุง / พอใช้ / ดี)</td>' +
-    '<td colspan="4" class="c b">' + (bands.low || '') + '</td>' +
-    '<td colspan="3" class="c b">' + (bands.mid || '') + '</td>' +
-    '<td colspan="3" class="c b">' + (bands.high || '') + '</td></tr>' +
+      '<td colspan="4" class="c b">' + (bands.low || '') + '</td>' +
+      '<td colspan="3" class="c b">' + (bands.mid || '') + '</td>' +
+      '<td colspan="3" class="c b">' + (bands.high || '') + '</td></tr>' +
     '<tr><td colspan="2" class="b">รวมคะแนนความพึงพอใจทั้งหมด</td>' +
-    '<td colspan="10" class="c b" style="font-size:15px">' + total + ' / ' + (questions.length * 10) + ' คะแนน</td></tr></table>';
+      '<td colspan="10" class="c b" style="font-size:14px">' + total + ' / ' +
+      (questions.length * 10) + ' คะแนน</td></tr></table>';
 
-  html += '<div class="b">สิ่งที่ผู้ว่าจ้างต้องการให้ปรับปรุงแก้ไข / พัฒนา</div><div class="lines">';
+  html += '<div class="para">บริษัทฯ ใคร่ขอแสดงความขอบคุณในการประเมินความพึงพอใจของท่าน ' +
+    'ทางบริษัทฯ จะนำเอาข้อมูลที่ได้รับไปพัฒนาการบริการ ' +
+    'และยืนยันว่าจะรักษามาตรฐานของการบริการที่ดียิ่งๆ ขึ้นไป</div>';
+
+  html += '<div class="label">สิ่งที่ผู้ว่าจ้างต้องการให้บริษัทฯ ปรับปรุงแก้ไข / พัฒนา</div><div class="lines">';
   var cm = String(row['ข้อเสนอแนะ'] || '').split('\n');
   for (var c = 0; c < Math.max(2, cm.length); c++) html += '<div>' + esc(cm[c] || '') + '</div>';
   html += '</div>';
 
-  // ลายเซ็นลูกค้า: ถ้ามีรูปให้วางทับเส้นเซ็น
-  var signUrl = driveThumb(row['ลายเซ็นผู้ประเมิน']);
-  var signImg = signUrl
-    ? '<img src="' + signUrl + '" alt="ลายเซ็น" style="max-height:52px;max-width:100%;display:block;margin:0 auto -6px">'
-    : '';
-
   html += '<div class="sig">' +
-    '<div>' + (signImg || '<div style="height:46px"></div>') +
-      '<div class="sigline"></div>ผู้ประเมิน (ผู้ว่าจ้าง)<br>' + esc(row['ผู้ประเมิน'] || '') + '</div>' +
-    '<div><div style="height:46px"></div><div class="sigline"></div>' +
-      'เจ้าหน้าที่ควบคุมคุณภาพ (QA)<br>' + esc(row['ชื่อQA']) + '</div>' +
-    '</div></div>';
+    sigCol(row['ลายเซ็นผู้ประเมิน'], 'ผู้ประเมิน (ผู้ว่าจ้าง)', row['ผู้ประเมิน'], row['วันที่']) +
+    sigCol('', 'เจ้าหน้าที่ควบคุมคุณภาพ (QA)', row['ชื่อQA'], '') +
+  '</div>' +
+  '<div class="sig" style="margin-top:8px">' +
+    '<div class="col"></div>' +
+    sigCol('', 'ผู้จัดการฝ่ายปฏิบัติการ', '', '') +
+  '</div></div>';
   return html;
 }
 

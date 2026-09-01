@@ -234,6 +234,22 @@
       <textarea id="auIssues" placeholder="ไม่บังคับ"></textarea>
     </div>
 
+    <div class="card">
+      <div class="q">ลายเซ็นผู้รับรองข้อมูล (QA) <span class="req">*</span></div>
+      <div class="hint" style="margin-bottom:10px">
+        ขอรับรองว่าข้อความข้างต้นเป็นความจริงทุกประการ — เซ็นด้วยนิ้วในกรอบ
+      </div>
+      <canvas id="auSignQa" class="signpad"></canvas>
+      <button type="button" class="btn gray sm mt" id="btnAuSignQaClear">🔄 เซ็นใหม่</button>
+    </div>
+
+    <div class="card">
+      <div class="q">ลายเซ็นผู้ว่าจ้าง</div>
+      <div class="hint" style="margin-bottom:10px">ไม่บังคับ — ให้ผู้ว่าจ้างเซ็นรับทราบผลการตรวจ (ถ้าอยู่หน้างาน)</div>
+      <canvas id="auSignEmp" class="signpad"></canvas>
+      <button type="button" class="btn gray sm mt" id="btnAuSignEmpClear">🔄 เซ็นใหม่</button>
+    </div>
+
     <button class="btn" id="btnAuSubmit">ส่งแบบตรวจมาตรฐาน</button>
     <div class="hint mt center" id="auReady"></div>
     <div style="height:26px"></div>
@@ -1009,18 +1025,22 @@ function openAudit() {
         };
       });
 
-      renderAuReady(cfg.audit.length);
       show('scAudit');
+      SignAuQa.init();  SignAuQa.clear();
+      SignAuEmp.init(); SignAuEmp.clear();
+      renderAuReady(cfg.audit.length);
     })
     .catch(function (e) { show('scCheckout'); setErr('coErr', e.message); });
 }
 
 function renderAuReady(totalQ) {
   var answered = Object.keys(S.auAns).length;
-  var btn = document.getElementById('btnAuSubmit');
-  btn.disabled = answered < totalQ;
+  var signed = SignAuQa.hasInk();
+  document.getElementById('btnAuSubmit').disabled = answered < totalQ || !signed;
   document.getElementById('auReady').textContent =
-    answered < totalQ ? 'ตอบแล้ว ' + answered + '/' + totalQ + ' ข้อ' : 'ครบทุกข้อแล้ว ✓';
+    answered < totalQ ? 'ตอบแล้ว ' + answered + '/' + totalQ + ' ข้อ'
+    : !signed         ? 'ตอบครบแล้ว — เหลือเซ็นรับรองข้อมูลด้านล่าง'
+                      : 'ครบแล้ว — กดส่งได้เลย';
 }
 
 document.getElementById('btnAuBack').onclick = function () { show('scCheckout'); renderDuty(); };
@@ -1041,7 +1061,9 @@ document.getElementById('btnAuSubmit').onclick = function () {
     staffCount: document.getElementById('auStaff').value.trim(),
     coordinator: document.getElementById('auCoord').value.trim(),
     employer: document.getElementById('auEmployer').value.trim(),
-    issues: document.getElementById('auIssues').value.trim()
+    issues: document.getElementById('auIssues').value.trim(),
+    signatureQa:  SignAuQa.payload(),
+    signatureEmp: SignAuEmp.payload()
   })
   .then(function (res) {
     S.duty[S.coLog.locationId] = res.duty;
@@ -1137,91 +1159,113 @@ function renderSvReady() {
                  : 'ครบแล้ว — กดส่งแบบประเมินได้เลย';
 }
 
-// ---------- ช่องเซ็นชื่อ ----------
-var Sign = {
-  cv: null, ctx: null, drawing: false, inked: false,
+// ---------- ช่องเซ็นชื่อ (ใช้ซ้ำได้หลายช่อง) ----------
 
-  init: function () {
-    var cv = document.getElementById('svSign');
-    // กำหนดขนาดจาก JS ไม่พึ่ง CSS — ถ้าสไตล์ชีตยังเป็นไฟล์เก่าที่แคชไว้
-    // canvas จะกางเกินจอจนใช้งานไม่ได้
-    var ratio = window.devicePixelRatio || 1;
-    var w = Math.max(240, cv.parentNode.clientWidth);
-    var h = 180;
-    cv.style.width  = w + 'px';
-    cv.style.height = h + 'px';
-    cv.style.background = '#fff';
-    cv.style.borderRadius = '10px';
-    cv.style.touchAction = 'none';
-    cv.width  = w * ratio;
-    cv.height = h * ratio;
+/**
+ * สร้างช่องเซ็นบน <canvas>
+ * กำหนดขนาดจาก JS ไม่พึ่ง CSS เผื่อสไตล์ชีตเก่ายังถูกแคชอยู่
+ * ถ้าปล่อยให้ canvas ใช้ขนาดปริยาย 300x150 จะกางเกินจอจนใช้งานไม่ได้
+ */
+function makeSignPad(canvasId, onChange) {
+  var pad = {
+    id: canvasId, cv: null, ctx: null, drawing: false, inked: false, bound: false,
 
-    var ctx = cv.getContext('2d');
-    ctx.scale(ratio, ratio);
-    ctx.lineWidth = 2.2;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.strokeStyle = '#1a2340';
+    init: function () {
+      var cv = document.getElementById(this.id);
+      if (!cv) return;
+      var ratio = window.devicePixelRatio || 1;
+      var w = Math.max(240, cv.parentNode.clientWidth);
+      var h = 170;
 
-    this.cv = cv; this.ctx = ctx; this.inked = false;
+      cv.style.width  = w + 'px';
+      cv.style.height = h + 'px';
+      cv.style.display = 'block';
+      cv.style.background = '#fff';
+      cv.style.border = '1px solid #3a4060';
+      cv.style.borderRadius = '10px';
+      cv.style.touchAction = 'none';
+      cv.width  = w * ratio;
+      cv.height = h * ratio;
 
-    if (this.bound) return;
-    this.bound = true;
-    var self = this;
+      var ctx = cv.getContext('2d');
+      ctx.scale(ratio, ratio);
+      ctx.lineWidth = 2.2;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.strokeStyle = '#1a2340';
 
-    function pos(e) {
-      var r = cv.getBoundingClientRect();
-      var p = (e.touches && e.touches[0]) || e;
-      return { x: p.clientX - r.left, y: p.clientY - r.top };
+      this.cv = cv; this.ctx = ctx; this.inked = false;
+      if (this.bound) return;
+      this.bound = true;
+
+      var self = this;
+      function pos(e) {
+        var r = cv.getBoundingClientRect();
+        var p = (e.touches && e.touches[0]) || e;
+        return { x: p.clientX - r.left, y: p.clientY - r.top };
+      }
+      function start(e) {
+        e.preventDefault();
+        self.drawing = true;
+        var p = pos(e);
+        self.ctx.beginPath();
+        self.ctx.moveTo(p.x, p.y);
+      }
+      function move(e) {
+        if (!self.drawing) return;
+        e.preventDefault();
+        var p = pos(e);
+        self.ctx.lineTo(p.x, p.y);
+        self.ctx.stroke();
+        if (!self.inked) { self.inked = true; if (onChange) onChange(); }
+      }
+      function end() { self.drawing = false; }
+
+      cv.addEventListener('mousedown', start);
+      cv.addEventListener('mousemove', move);
+      window.addEventListener('mouseup', end);
+      cv.addEventListener('touchstart', start, { passive: false });
+      cv.addEventListener('touchmove', move, { passive: false });
+      cv.addEventListener('touchend', end);
+    },
+
+    clear: function () {
+      if (!this.ctx) return;
+      this.ctx.clearRect(0, 0, this.cv.width, this.cv.height);
+      this.inked = false;
+      if (onChange) onChange();
+    },
+
+    hasInk: function () { return this.inked; },
+
+    /** รูปลายเซ็น PNG พื้นขาว (base64) — คืน null ถ้ายังไม่ได้เซ็น */
+    data: function () {
+      if (!this.inked) return null;
+      var out = document.createElement('canvas');
+      out.width = this.cv.width; out.height = this.cv.height;
+      var c = out.getContext('2d');
+      c.fillStyle = '#ffffff';
+      c.fillRect(0, 0, out.width, out.height);
+      c.drawImage(this.cv, 0, 0);
+      return out.toDataURL('image/png').split(',')[1];
+    },
+
+    /** แปลงเป็น payload พร้อมส่ง API */
+    payload: function () {
+      var d = this.data();
+      return d ? { data: d, mimeType: 'image/png' } : null;
     }
-    function start(e) {
-      e.preventDefault();
-      self.drawing = true;
-      var p = pos(e);
-      self.ctx.beginPath();
-      self.ctx.moveTo(p.x, p.y);
-    }
-    function move(e) {
-      if (!self.drawing) return;
-      e.preventDefault();
-      var p = pos(e);
-      self.ctx.lineTo(p.x, p.y);
-      self.ctx.stroke();
-      if (!self.inked) { self.inked = true; renderSvReady(); }
-    }
-    function end() { self.drawing = false; }
+  };
+  return pad;
+}
 
-    cv.addEventListener('mousedown', start);
-    cv.addEventListener('mousemove', move);
-    window.addEventListener('mouseup', end);
-    cv.addEventListener('touchstart', start, { passive: false });
-    cv.addEventListener('touchmove', move, { passive: false });
-    cv.addEventListener('touchend', end);
-  },
+var Sign      = makeSignPad('svSign',    function () { renderSvReady(); });
+var SignAuQa  = makeSignPad('auSignQa',  function () { renderAuReady(S.formCfg ? S.formCfg.audit.length : 0); });
+var SignAuEmp = makeSignPad('auSignEmp', function () {});
 
-  clear: function () {
-    if (!this.ctx) return;
-    this.ctx.clearRect(0, 0, this.cv.width, this.cv.height);
-    this.inked = false;
-    renderSvReady();
-  },
-
-  hasInk: function () { return this.inked; },
-
-  /** คืนรูปลายเซ็น PNG พื้นขาว (base64) */
-  data: function () {
-    if (!this.inked) return null;
-    var out = document.createElement('canvas');
-    out.width = this.cv.width; out.height = this.cv.height;
-    var c = out.getContext('2d');
-    c.fillStyle = '#ffffff';
-    c.fillRect(0, 0, out.width, out.height);
-    c.drawImage(this.cv, 0, 0);
-    return out.toDataURL('image/png').split(',')[1];
-  }
-};
-
-document.getElementById('btnSignClear').onclick = function () { Sign.clear(); };
+document.getElementById('btnSignClear').onclick        = function () { Sign.clear(); };
+document.getElementById('btnAuSignQaClear').onclick    = function () { SignAuQa.clear(); };
+document.getElementById('btnAuSignEmpClear').onclick   = function () { SignAuEmp.clear(); };
 
 /** ออกจากโหมดลูกค้า ต้องใส่รหัสพนักงาน QA */
 function svExit(target) {
@@ -1248,7 +1292,7 @@ document.getElementById('btnSvSubmit').onclick = function () {
     totalStaff: document.getElementById('svTotal').value.trim(),
     heads: document.getElementById('svHeads').value.trim(),
     workers: document.getElementById('svWorkers').value.trim(),
-    signature: Sign.data() ? { data: Sign.data(), mimeType: 'image/png' } : null
+    signature: Sign.payload()
   })
   .then(function (res) {
     S.duty[S.coLog.locationId] = res.duty;
