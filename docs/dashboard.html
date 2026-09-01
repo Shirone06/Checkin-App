@@ -615,14 +615,18 @@ function openFormPrint(data, month, onlyLoc) {
   w.document.close();
 }
 
-/** บล็อกลายเซ็น 1 ช่อง — มีรูปก็วางรูป ไม่มีก็เว้นที่ให้เซ็นบนกระดาษ */
+/**
+ * บล็อกลายเซ็น 1 ช่อง — มีรูปก็วางรูป ไม่มีก็เว้นที่ให้เซ็นบนกระดาษ
+ * เรียงตามธรรมเนียมเอกสารไทย: ลายเซ็น → เส้น → (ชื่อในวงเล็บ) → ตำแหน่ง → วันที่
+ */
 function sigCol(url, caption, name, dateText) {
   var thumb = driveThumb(url);
+  var inName = String(name || '').trim();
   return '<div class="col">' +
     '<div class="sigimg">' + (thumb ? '<img src="' + thumb + '" alt="ลายเซ็น">' : '') + '</div>' +
     '<div class="sigline"></div>' +
+    '<div class="signame">( ' + (inName ? esc(inName) : '&nbsp;'.repeat(22)) + ' )</div>' +
     '<div>' + esc(caption) + '</div>' +
-    '<div class="signame">' + esc(name || '') + '</div>' +
     (dateText ? '<div class="sigdate">วันที่ ' + esc(dateText) + '</div>' : '') +
   '</div>';
 }
