@@ -575,7 +575,7 @@ function openFormPrint(data, month, onlyLoc) {
     '.note{font-size:11.5px;color:#333}' +
 
     '.label{font-weight:700;margin:10px 0 4px;font-size:13px}' +
-    '.lines div{border-bottom:1px dotted #666;min-height:20px;line-height:20px;font-size:12.5px}' +
+    '.lines div{border-bottom:1.2px dotted #666;min-height:20px;line-height:20px;font-size:12.5px}' +
     '.para{font-size:12.5px;margin:8px 0;text-indent:22px;line-height:1.6}' +
     '.certify{text-align:right;font-size:12.5px;margin:6px 0 2px}' +
 
@@ -593,6 +593,26 @@ function openFormPrint(data, month, onlyLoc) {
 
     '.empty{border:1px dashed #888;text-align:center;padding:30px 10px;color:#555;font-size:14px;margin-bottom:8px}' +
     '.meta{font-size:11.5px;color:#444;margin-bottom:6px}' +
+
+    // ---- ช่องเติมคำเส้นประ ตามฟอร์มกระดาษ (ไม่ใช้ตารางมีกรอบ) ----
+    '.fline{display:flex;align-items:baseline;gap:5px;margin:9px 0;font-size:13px;' +
+      'white-space:nowrap}' +
+    '.fill{flex:1;border-bottom:1.2px dotted #000;text-align:center;padding:0 5px;' +
+      'min-height:17px;line-height:17px}' +
+    '.fill.w70{flex:none;width:70px}.fill.w100{flex:none;width:100px}' +
+    '.instr{font-size:12.5px;line-height:1.75;margin:10px 0 8px}' +
+    '.thanks{font-size:12.5px;line-height:1.75;margin:9px 0}' +
+    '.thanks .in{display:inline-block;width:26px}' +
+
+    // ---- บล็อกลายเซ็นแบบต้นฉบับ: ซ้ายผู้ประเมิน+วันที่ / ขวา QA+ผู้จัดการ ----
+    '.sgrid{display:flex;justify-content:space-between;margin-top:20px;font-size:12.5px}' +
+    '.sgrid .half{width:47%}' +
+    '.srow{display:flex;align-items:flex-end;gap:5px;white-space:nowrap}' +
+    '.sfill{flex:1;position:relative;border-bottom:1.2px dotted #000;height:19px}' +
+    '.sfill img{position:absolute;left:50%;bottom:1px;transform:translateX(-50%);' +
+      'max-height:40px;max-width:94%;mix-blend-mode:multiply}' +
+    '.scap{text-align:center;margin-top:2px;line-height:1.5}' +
+    '.sgap{height:26px}' +
     '</style>';
 
   var w = window.open('', '_blank');
@@ -696,14 +716,27 @@ function auditPage(loc, row, questions, month) {
   return html;
 }
 
-/** หน้าแบบประเมินความพึงพอใจการบริการทำความสะอาด (FM-OP04-03 REV.03) */
+/**
+ * หน้าแบบประเมินความพึงพอใจการบริการทำความสะอาด
+ * จัดหน้าให้ตรงกับฟอร์มกระดาษ FM-OP04-03 REV.03 ทุกส่วน
+ */
 function surveyPage(loc, row, skips, questions, month) {
+  var mp = String(month || '').split('-');
+  var thMonthName = ['', 'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
+    'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'][mp.length === 2 ? +mp[1] : 0] || '';
+  var thYear2 = mp.length === 2 ? String(+mp[0] + 543).slice(-2) : '';
+
   var head =
     '<div class="page">' +
     '<div class="code">FM-OP04-03 REV.03</div>' +
     '<div class="org">' + esc(ORG_NAME) + '</div>' +
     '<h1>แบบประเมินความพึงพอใจการบริการทำความสะอาด</h1>' +
-    '<div class="period">ประจำเดือน ' + esc(thaiMonth(month)) + '</div>';
+    '<div class="period" style="display:flex;justify-content:center;align-items:baseline;gap:5px">' +
+      '<span>ประจำเดือน</span>' +
+      '<span class="fill" style="flex:none;width:170px">' + esc(thMonthName) + '</span>' +
+      '<span>/ 25</span>' +
+      '<span class="fill" style="flex:none;width:60px">' + esc(thYear2) + '</span>' +
+    '</div>';
 
   if (!row) {
     var note = skips.length
@@ -717,27 +750,35 @@ function surveyPage(loc, row, skips, questions, month) {
   var scores = {};
   try { scores = JSON.parse(row['คะแนนรายข้อ(JSON)'] || '{}'); } catch (e) {}
 
+  // ---- ช่องเติมคำหัวฟอร์ม ----
   var html = head +
-    '<table class="info">' +
-      '<tr><td style="width:60%"><b>หน่วยงาน:</b> ' + esc(loc.name) + '</td>' +
-        '<td><b>พื้นที่ / อาคาร / ชั้น:</b> ' + esc(row['พื้นที่/อาคาร/ชั้น'] || '-') + '</td></tr>' +
-      '<tr><td><b>ชื่อ-นามสกุล (ผู้ว่าจ้าง):</b> ' + esc(row['ผู้ประเมิน'] || '-') + '</td>' +
-        '<td><b>จำนวนพนักงานทั้งหมด:</b> ' + esc(row['จำนวนพนักงานทั้งหมด'] || '-') + ' คน</td></tr>' +
-      '<tr><td><b>ตำแหน่ง:</b> ' + esc(row['ตำแหน่งผู้ประเมิน'] || '-') + '</td>' +
-        '<td><b>หัวหน้างาน</b> ' + esc(row['หัวหน้างาน(คน)'] || '-') + ' คน &nbsp; ' +
-        '<b>พนักงาน</b> ' + esc(row['พนักงาน(คน)'] || '-') + ' คน</td></tr>' +
-    '</table>' +
+    '<div class="fline">' +
+      '<span>หน่วยงาน</span><span class="fill">' + esc(loc.name) + '</span>' +
+      '<span>พื้นที่ / อาคาร / ชั้น</span>' +
+      '<span class="fill">' + esc(row['พื้นที่/อาคาร/ชั้น'] || '') + '</span>' +
+    '</div>' +
+    '<div class="fline">' +
+      '<span>ชื่อ-นามสกุล</span><span class="fill">' + esc(row['ผู้ประเมิน'] || '') + '</span>' +
+      '<span>( ผู้ว่าจ้าง )</span><span>จำนวนพนักงานทั้งหมด</span>' +
+      '<span class="fill w100">' + esc(row['จำนวนพนักงานทั้งหมด'] || '') + '</span><span>คน</span>' +
+    '</div>' +
+    '<div class="fline">' +
+      '<span>ตำแหน่ง</span><span class="fill">' + esc(row['ตำแหน่งผู้ประเมิน'] || '') + '</span>' +
+      '<span>หัวหน้างาน</span><span class="fill w70">' + esc(row['หัวหน้างาน(คน)'] || '') + '</span><span>คน</span>' +
+      '<span>พนักงาน</span><span class="fill w70">' + esc(row['พนักงาน(คน)'] || '') + '</span><span>คน</span>' +
+    '</div>' +
 
-    '<div class="para">ขอความกรุณาให้คะแนนความพึงพอใจตามระดับความพึงพอใจที่ท่านได้รับ ' +
-    '(ตั้งแต่ 1 - 10 คะแนน) โดยทำเครื่องหมาย ✓ ในช่องที่ต้องการ</div>';
+    '<div class="instr">ขอความกรุณาให้คะแนนความพึงพอใจตามระดับความพึงพอใจที่ท่านได้รับ ' +
+    '( ตั้งแต่ 1 - 10 คะแนน) &nbsp; โดยทำเครื่องหมาย ✓ หรือ ✗ หรือใส่คะแนนเป็นตัวเลขในช่องที่ต้องการ</div>';
 
+  // ---- ตารางคะแนน ----
   html += '<table><tr>' +
-    '<th rowspan="2" style="width:34px">ลำดับ</th>' +
-    '<th rowspan="2" style="text-align:left;width:38%">รายละเอียด</th>' +
-    '<th colspan="4" class="grp">ปรับปรุง (1 ถึง 4)</th>' +
-    '<th colspan="3" class="grp">พอใช้ (5 ถึง 7)</th>' +
-    '<th colspan="3" class="grp">ดี (8 ถึง 10)</th></tr><tr>';
-  for (var s = 1; s <= 10; s++) html += '<th class="num">' + s + '</th>';
+    '<th rowspan="2" style="width:42px">ลำดับ</th>' +
+    '<th rowspan="2" style="width:36%">รายละเอียด</th>' +
+    '<th colspan="4" class="grp">ปรับปรุง ( 1 ถึง 4 )</th>' +
+    '<th colspan="3" class="grp">พอใช้ ( 5 ถึง 7 )</th>' +
+    '<th colspan="3" class="grp">ดี ( 8 ถึง 10 )</th></tr><tr>';
+  for (var n = 1; n <= 10; n++) html += '<th class="num">( ' + n + ' )</th>';
   html += '</tr>';
 
   var bands = { low: 0, mid: 0, high: 0 }, total = 0;
@@ -750,30 +791,47 @@ function surveyPage(loc, row, skips, questions, month) {
     html += '</tr>';
   });
 
-  html += '<tr><td colspan="2" class="b">รวมคะแนนในแต่ละส่วน (ปรับปรุง / พอใช้ / ดี)</td>' +
+  html += '<tr><td colspan="2" class="c">รวมคะแนนในแต่ละส่วน ( ปรับปรุง / พอใช้ / ดี )</td>' +
       '<td colspan="4" class="c b">' + (bands.low || '') + '</td>' +
       '<td colspan="3" class="c b">' + (bands.mid || '') + '</td>' +
       '<td colspan="3" class="c b">' + (bands.high || '') + '</td></tr>' +
-    '<tr><td colspan="2" class="b">รวมคะแนนความพึงพอใจทั้งหมด</td>' +
-      '<td colspan="10" class="c b" style="font-size:14px">' + total + ' / ' +
-      (questions.length * 10) + ' คะแนน</td></tr></table>';
+    '<tr><td colspan="9" class="c b">รวมคะแนนความพึงพอใจทั้งหมด</td>' +
+      '<td colspan="3" class="c b">' + total + ' คะแนน</td></tr></table>';
 
-  html += '<div class="para">บริษัทฯ ใคร่ขอแสดงความขอบคุณในการประเมินความพึงพอใจของท่าน ' +
-    'ทางบริษัทฯ จะนำเอาข้อมูลที่ได้รับไปพัฒนาการบริการ ' +
-    'และยืนยันว่าจะรักษามาตรฐานของการบริการที่ดียิ่งๆ ขึ้นไป</div>';
+  // ---- ย่อหน้าขอบคุณ + ช่องข้อเสนอแนะ ----
+  html += '<div class="thanks"><span class="in"></span>' +
+    'บริษัทฯ ใคร่ขอแสดงความขอบคุณในการประเมินความพึงพอใจของท่าน ทางบริษัทฯ ' +
+    'จะนำเอาข้อมูลที่ได้รับไปพัฒนาการบริการและยืนยันว่าจะรักษามาตรฐานของการบริการที่ดียิ่งๆ ขึ้นไป</div>';
 
-  html += '<div class="label">สิ่งที่ผู้ว่าจ้างต้องการให้บริษัทฯ ปรับปรุงแก้ไข / พัฒนา</div><div class="lines">';
   var cm = String(row['ข้อเสนอแนะ'] || '').split('\n');
-  for (var c = 0; c < Math.max(2, cm.length); c++) html += '<div>' + esc(cm[c] || '') + '</div>';
+  html += '<div class="fline" style="margin-bottom:2px">' +
+      '<span><span class="thanks in"></span>สิ่งที่ผู้ว่าจ้างต้องการให้บริษัท ซี.ซี.คอนเทนท์ฯ ปรับปรุงแก้ไข / พัฒนา</span>' +
+      '<span class="fill">' + esc(cm[0] || '') + '</span>' +
+    '</div><div class="lines">';
+  for (var c = 1; c < Math.max(4, cm.length); c++) html += '<div>' + esc(cm[c] || '') + '</div>';
   html += '</div>';
 
-  html += '<div class="sig">' +
-    sigCol(row['ลายเซ็นผู้ประเมิน'], 'ผู้ประเมิน (ผู้ว่าจ้าง)', row['ผู้ประเมิน'], row['วันที่']) +
-    sigCol('', 'เจ้าหน้าที่ควบคุมคุณภาพ (QA)', row['ชื่อQA'], '') +
-  '</div>' +
-  '<div class="sig" style="margin-top:8px">' +
-    '<div class="col"></div>' +
-    sigCol('', 'ผู้จัดการฝ่ายปฏิบัติการ', '', '') +
+  // ---- ลายเซ็น: ซ้าย ผู้ประเมิน + วันที่ประเมิน / ขวา QA + ผู้จัดการฝ่ายปฏิบัติการ ----
+  var signImg = driveThumb(row['ลายเซ็นผู้ประเมิน']);
+  var raterName = String(row['ผู้ประเมิน'] || '').trim();
+  var blank = '&nbsp;'.repeat(20);
+
+  html += '<div class="sgrid">' +
+    '<div class="half">' +
+      '<div class="srow"><span>ลงชื่อผู้ประเมิน</span><span class="sfill">' +
+        (signImg ? '<img src="' + signImg + '" alt="ลายเซ็น">' : '') + '</span></div>' +
+      '<div class="scap">( ' + (raterName ? esc(raterName) : blank) + ' )<br>ผู้ว่าจ้าง</div>' +
+      '<div class="sgap"></div>' +
+      '<div class="srow"><span>วันที่ประเมิน</span>' +
+        '<span class="sfill" style="text-align:center;line-height:19px">' + esc(row['วันที่'] || '') + '</span></div>' +
+    '</div>' +
+    '<div class="half">' +
+      '<div class="srow"><span>ลงชื่อ</span><span class="sfill"></span></div>' +
+      '<div class="scap">( ' + (row['ชื่อQA'] ? esc(row['ชื่อQA']) : blank) + ' )<br>เจ้าหน้าที่ควบคุมคุณภาพ ( QA )</div>' +
+      '<div class="sgap"></div>' +
+      '<div class="srow"><span>ลงชื่อ</span><span class="sfill"></span></div>' +
+      '<div class="scap">( ' + blank + ' )<br>ผู้จัดการฝ่ายปฏิบัติการ</div>' +
+    '</div>' +
   '</div></div>';
   return html;
 }
