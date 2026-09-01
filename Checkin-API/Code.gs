@@ -54,6 +54,33 @@ var HEAD_LOG = [
 var ST_OPEN = 'กำลังปฏิบัติงาน';
 var ST_DONE = 'เสร็จสิ้น';
 
+// ===== เฟส 2: แบบประเมินประจำเดือน (เฉพาะตำแหน่ง QA) =====
+
+/** คอลัมน์เสริมในแท็บ Locations — รหัสพนักงาน QA ที่ดูแลหน่วยนี้ (หลายคนคั่นด้วย ,) */
+var COL_LOC_QA = 'QA ผู้ดูแล';
+
+var SH_CFG    = 'FormConfig';
+var SH_SURVEY = 'SurveyLog';
+var SH_AUDIT  = 'AuditLog';
+
+var HEAD_CFG = ['ฟอร์ม', 'ลำดับ', 'หมวด', 'คำถาม', 'สถานะ'];
+
+var HEAD_SURVEY = [
+  'เดือน', 'วันที่', 'เวลา', 'Log ID', 'รหัสหน่วยงาน', 'หน่วยงาน',
+  'รหัสQA', 'ชื่อQA', 'สถานะ', 'ผู้ประเมิน', 'ตำแหน่งผู้ประเมิน', 'พื้นที่/อาคาร/ชั้น',
+  'จำนวนพนักงานทั้งหมด', 'หัวหน้างาน(คน)', 'พนักงาน(คน)',
+  'คะแนนรายข้อ(JSON)', 'คะแนนรวม', 'ข้อเสนอแนะ', 'เหตุผลไม่สะดวก', 'บันทึกเมื่อ'
+];
+
+var HEAD_AUDIT = [
+  'เดือน', 'วันที่', 'เวลา', 'Log ID', 'รหัสหน่วยงาน', 'หน่วยงาน',
+  'รหัสQA', 'ชื่อQA', 'จำนวนพนักงานประจำจุด', 'ผู้ประสานงานหน้างาน', 'ผู้ว่าจ้าง',
+  'ผลรายข้อ(JSON)', 'ปกติ(ข้อ)', 'ปรับปรุง(ข้อ)', 'ปัญหา/ข้อเสนอแนะ', 'บันทึกเมื่อ'
+];
+
+var ST_SURVEY_OK   = 'ประเมินแล้ว';
+var ST_SURVEY_SKIP = 'ลูกค้าไม่สะดวก';
+
 
 // ===================== จุดรับ request =====================
 
@@ -95,6 +122,11 @@ function route_(action, p, body) {
     case 'checkin':     return apiCheckin_(body);
     case 'checkout':    return apiCheckout_(body);
     case 'dashboard':   return apiDashboard_(p);
+    case 'formConfig':  return { ok: true, forms: readFormConfig_() };
+    case 'submitAudit':   return apiSubmitAudit_(body);
+    case 'submitSurvey':  return apiSubmitSurvey_(body);
+    case 'monthlyStatus': return apiMonthlyStatus_(p);
+    case 'exportForms':   return apiExportForms_(p);
     case 'adminLoad':   return apiAdminLoad_(p);
     case 'adminSaveLocation':   return apiAdminSaveLocation_(body);
     case 'adminDeleteLocation': return apiAdminDeleteLocation_(body);
@@ -128,11 +160,36 @@ function apiBootstrap_(code) {
   if (!emp)             throw new Error('ไม่พบรหัสพนักงาน "' + code + '" ในระบบ');
   if (!emp.active)      throw new Error('รหัสพนักงาน "' + code + '" ถูกระงับการใช้งาน');
 
+  var locations = readLocations_(true);
+  var open      = findOpenLogs_(code);
+
+  // เฉพาะ QA: สถานะแบบประเมินประจำเดือนของหน่วยที่ตนดูแล
+  var duty = null;
+  if (isQA_(emp)) {
+    duty = {};
+    var month = monthKey_();
+    for (var i = 0; i < locations.length; i++) {
+      var l = locations[i];
+      if (l.qa.indexOf(emp.code) < 0) continue;
+      duty[l.id] = {
+        audit:  auditDoneMonth_(l.id, month),
+        survey: surveyDoneMonth_(l.id, month)
+      };
+    }
+    for (var j = 0; j < open.length; j++) {
+      if (duty[open[j].locationId]) {
+        open[j].surveySkipped = surveyUnavailable_(open[j].logId);
+      }
+    }
+  }
+
   return {
     ok: true,
     employee:  emp,
-    locations: readLocations_(true),
-    open:      findOpenLogs_(code),
+    locations: locations,
+    open:      open,
+    duty:      duty,
+    month:     monthKey_(),
     config:    { maxAccuracy: MAX_ACCURACY_M, mode: GEOFENCE_MODE }
   };
 }
@@ -216,6 +273,9 @@ function apiCheckout_(d) {
       throw new Error('รายการนี้ไม่ใช่ของคุณ');
     }
     if (cellTime_(get_(found.row, idx, 'เวลาออก'))) throw new Error('รายการนี้เช็คเอาท์ไปแล้ว');
+
+    // ด่านแบบประเมินประจำเดือน — เฉพาะ QA ที่หน่วยของตัวเอง
+    qaGate_(emp, String(get_(found.row, idx, 'รหัสหน่วยงาน')).trim(), d.logId);
 
     var now = new Date();
     var row = found.row;
@@ -449,6 +509,332 @@ function apiAdminSaveEmployee_(d) {
 }
 
 
+// ===================== แบบประเมินประจำเดือน (เฟส 2) =====================
+
+/** พนักงานคนนี้เป็น QA ไหม — ดูจากคอลัมน์ตำแหน่งในแท็บ Employees */
+function isQA_(emp) {
+  return String((emp && emp.position) || '').toUpperCase().indexOf('QA') >= 0;
+}
+
+/** คีย์เดือนปัจจุบัน เช่น "2026-09" */
+function monthKey_() { return nowStr_('yyyy-MM'); }
+
+/**
+ * ด่านก่อนเช็คเอาท์: QA ที่เช็คเอาท์จากหน่วยที่ตนดูแล ต้องทำแบบประเมิน
+ * ของเดือนนั้นให้ครบก่อน — แบบตรวจมาตรฐานต้องทำเสมอ ส่วนแบบพึงพอใจ
+ * ผ่อนผันได้ถ้าบันทึก "ลูกค้าไม่สะดวก" ไว้สำหรับการเข้างานรอบนี้
+ */
+function qaGate_(emp, locationId, logId) {
+  if (!isQA_(emp)) return;
+  var loc = findLocation_(locationId);
+  if (!loc || loc.qa.indexOf(emp.code) < 0) return;
+
+  var month = monthKey_();
+  if (!auditDoneMonth_(loc.id, month)) {
+    throw new Error('เดือนนี้ยังไม่ได้ทำ "แบบตรวจมาตรฐานการปฏิบัติงาน" ของ ' + loc.name +
+                    ' — กรุณาทำให้เสร็จก่อนเช็คเอาท์');
+  }
+  if (!surveyDoneMonth_(loc.id, month) && !surveyUnavailable_(logId)) {
+    throw new Error('เดือนนี้ยังไม่ได้ทำ "แบบประเมินความพึงพอใจ" ของ ' + loc.name +
+                    ' — ยื่นเครื่องให้ลูกค้าประเมิน หรือบันทึก "ลูกค้าไม่สะดวก" ก่อนเช็คเอาท์');
+  }
+}
+
+/** อ่านข้อคำถามทั้ง 2 ฟอร์มจากแท็บ FormConfig (แก้คำถามได้ในชีต ไม่ต้องแก้โค้ด) */
+function readFormConfig_() {
+  var sheet = getSheet_(SH_CFG);
+  var idx   = headerIndex_(sheet, HEAD_CFG);
+  var last  = sheet.getLastRow();
+  var forms = { audit: [], survey: [] };
+  if (last < 2) return forms;
+
+  var values = sheet.getRange(2, 1, last - 1, sheet.getLastColumn()).getValues();
+  for (var i = 0; i < values.length; i++) {
+    var r    = values[i];
+    var form = String(get_(r, idx, 'ฟอร์ม')).trim().toLowerCase();
+    var q    = String(get_(r, idx, 'คำถาม')).trim();
+    if (!forms[form] || !q) continue;
+    if (!isActive_(get_(r, idx, 'สถานะ'))) continue;
+    forms[form].push({
+      order:    Number(get_(r, idx, 'ลำดับ')) || (forms[form].length + 1),
+      section:  String(get_(r, idx, 'หมวด')).trim(),
+      question: q
+    });
+  }
+  forms.audit.sort(function (a, b) { return a.order - b.order; });
+  forms.survey.sort(function (a, b) { return a.order - b.order; });
+  return forms;
+}
+
+/** เดือนนี้หน่วยนี้ทำแบบตรวจมาตรฐานแล้วหรือยัง */
+function auditDoneMonth_(locationId, month) {
+  return scanLog_(SH_AUDIT, HEAD_AUDIT, function (r, idx) {
+    return String(get_(r, idx, 'เดือน')).trim() === month &&
+           String(get_(r, idx, 'รหัสหน่วยงาน')).trim() === locationId;
+  }).length > 0;
+}
+
+/** เดือนนี้หน่วยนี้มีผลประเมินพึงพอใจ (ที่ลูกค้าประเมินจริง) แล้วหรือยัง */
+function surveyDoneMonth_(locationId, month) {
+  return scanLog_(SH_SURVEY, HEAD_SURVEY, function (r, idx) {
+    return String(get_(r, idx, 'เดือน')).trim() === month &&
+           String(get_(r, idx, 'รหัสหน่วยงาน')).trim() === locationId &&
+           String(get_(r, idx, 'สถานะ')).trim() === ST_SURVEY_OK;
+  }).length > 0;
+}
+
+/** การเข้างานรอบนี้ (logId) บันทึก "ลูกค้าไม่สะดวก" ไว้แล้วหรือยัง */
+function surveyUnavailable_(logId) {
+  if (!logId) return false;
+  return scanLog_(SH_SURVEY, HEAD_SURVEY, function (r, idx) {
+    return String(get_(r, idx, 'Log ID')).trim() === String(logId).trim() &&
+           String(get_(r, idx, 'สถานะ')).trim() === ST_SURVEY_SKIP;
+  }).length > 0;
+}
+
+/** อ่านทุกแถวของแท็บ log ที่ตรงเงื่อนไข — คืน [{row, idx}] */
+function scanLog_(sheetName, expected, match) {
+  var sheet = getSheet_(sheetName);
+  var idx   = headerIndex_(sheet, expected);
+  var last  = sheet.getLastRow();
+  var out = [];
+  if (last < 2) return out;
+  var values = sheet.getRange(2, 1, last - 1, sheet.getLastColumn()).getValues();
+  for (var i = 0; i < values.length; i++) {
+    if (match(values[i], idx)) out.push({ row: values[i], idx: idx });
+  }
+  return out;
+}
+
+/** ตรวจว่า QA คนนี้มีสิทธิ์ส่งฟอร์มของหน่วยนี้ แล้วคืนข้อมูลหน่วย */
+function requireQaDuty_(emp, locationId) {
+  if (!isQA_(emp)) throw new Error('เฉพาะพนักงานตำแหน่ง QA เท่านั้นที่ส่งแบบประเมินได้');
+  var loc = requireLocation_(locationId);
+  if (loc.qa.indexOf(emp.code) < 0) {
+    throw new Error('คุณไม่ได้เป็น QA ผู้ดูแลของ "' + loc.name + '"');
+  }
+  return loc;
+}
+
+/** ส่งแบบตรวจมาตรฐานการปฏิบัติงาน (QA กรอกเอง) */
+function apiSubmitAudit_(d) {
+  d = d || {};
+  var emp = requireEmployee_(d.empCode);
+  var loc = requireQaDuty_(emp, d.locationId);
+
+  var questions = readFormConfig_().audit;
+  if (!questions.length) throw new Error('ยังไม่ได้ตั้งข้อคำถามในแท็บ FormConfig');
+
+  var answers = d.answers || {};
+  var normals = 0, improves = 0;
+  for (var i = 0; i < questions.length; i++) {
+    var a = String(answers[questions[i].order] || '').trim();
+    if (a === 'ปกติ') normals++;
+    else if (a === 'ปรับปรุง') improves++;
+    else throw new Error('กรุณาตอบข้อ "' + questions[i].question + '" (ปกติ/ปรับปรุง)');
+  }
+
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var sheet = getSheet_(SH_AUDIT);
+    var idx   = headerIndex_(sheet, HEAD_AUDIT);
+    var now   = new Date();
+
+    var row = new Array(sheet.getLastColumn() || HEAD_AUDIT.length).fill('');
+    put_(row, idx, 'เดือน',               monthKey_());
+    put_(row, idx, 'วันที่',               fmt_(now, 'dd/MM/yyyy'));
+    put_(row, idx, 'เวลา',                fmt_(now, 'HH:mm'));
+    put_(row, idx, 'Log ID',              String(d.logId || '').trim());
+    put_(row, idx, 'รหัสหน่วยงาน',         loc.id);
+    put_(row, idx, 'หน่วยงาน',            loc.name);
+    put_(row, idx, 'รหัสQA',              emp.code);
+    put_(row, idx, 'ชื่อQA',              emp.name);
+    put_(row, idx, 'จำนวนพนักงานประจำจุด', String(d.staffCount || '').trim());
+    put_(row, idx, 'ผู้ประสานงานหน้างาน',   String(d.coordinator || '').trim());
+    put_(row, idx, 'ผู้ว่าจ้าง',            String(d.employer || '').trim());
+    put_(row, idx, 'ผลรายข้อ(JSON)',       JSON.stringify({ answers: answers, remarks: d.remarks || {} }));
+    put_(row, idx, 'ปกติ(ข้อ)',            normals);
+    put_(row, idx, 'ปรับปรุง(ข้อ)',        improves);
+    put_(row, idx, 'ปัญหา/ข้อเสนอแนะ',     String(d.issues || '').trim());
+    put_(row, idx, 'บันทึกเมื่อ',           now.toISOString());
+    sheet.appendRow(row);
+
+    return {
+      ok: true, month: monthKey_(),
+      duty: { audit: true, survey: surveyDoneMonth_(loc.id, monthKey_()) }
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * ส่งแบบประเมินความพึงพอใจ
+ * - โหมดปกติ: ลูกค้ากดคะแนน 1-10 ครบทุกข้อ
+ * - โหมด "ลูกค้าไม่สะดวก" (d.unavailable = true): บันทึกเหตุผลไว้
+ *   ปลดล็อกเช็คเอาท์เฉพาะรอบนี้ แต่เดือนนั้นยังถือว่าค้างประเมินอยู่
+ */
+function apiSubmitSurvey_(d) {
+  d = d || {};
+  var emp = requireEmployee_(d.empCode);
+  var loc = requireQaDuty_(emp, d.locationId);
+
+  var status, scores = {}, total = '';
+  if (d.unavailable) {
+    status = ST_SURVEY_SKIP;
+    if (!String(d.reason || '').trim()) throw new Error('กรุณาระบุเหตุผลที่ลูกค้าไม่สะดวก');
+    if (!String(d.logId || '').trim())  throw new Error('ไม่พบรายการเช็คอินที่อ้างอิง');
+  } else {
+    status = ST_SURVEY_OK;
+    var questions = readFormConfig_().survey;
+    if (!questions.length) throw new Error('ยังไม่ได้ตั้งข้อคำถามในแท็บ FormConfig');
+    var sum = 0;
+    for (var i = 0; i < questions.length; i++) {
+      var s = Number((d.scores || {})[questions[i].order]);
+      if (!isFinite(s) || s < 1 || s > 10) {
+        throw new Error('กรุณาให้คะแนนข้อ "' + questions[i].question + '" (1-10)');
+      }
+      scores[questions[i].order] = s;
+      sum += s;
+    }
+    total = sum;
+  }
+
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var sheet = getSheet_(SH_SURVEY);
+    var idx   = headerIndex_(sheet, HEAD_SURVEY);
+    var now   = new Date();
+
+    var row = new Array(sheet.getLastColumn() || HEAD_SURVEY.length).fill('');
+    put_(row, idx, 'เดือน',               monthKey_());
+    put_(row, idx, 'วันที่',               fmt_(now, 'dd/MM/yyyy'));
+    put_(row, idx, 'เวลา',                fmt_(now, 'HH:mm'));
+    put_(row, idx, 'Log ID',              String(d.logId || '').trim());
+    put_(row, idx, 'รหัสหน่วยงาน',         loc.id);
+    put_(row, idx, 'หน่วยงาน',            loc.name);
+    put_(row, idx, 'รหัสQA',              emp.code);
+    put_(row, idx, 'ชื่อQA',              emp.name);
+    put_(row, idx, 'สถานะ',               status);
+    put_(row, idx, 'ผู้ประเมิน',            String(d.rater || '').trim());
+    put_(row, idx, 'ตำแหน่งผู้ประเมิน',      String(d.raterPosition || '').trim());
+    put_(row, idx, 'พื้นที่/อาคาร/ชั้น',      String(d.area || '').trim());
+    put_(row, idx, 'จำนวนพนักงานทั้งหมด',   String(d.totalStaff || '').trim());
+    put_(row, idx, 'หัวหน้างาน(คน)',        String(d.heads || '').trim());
+    put_(row, idx, 'พนักงาน(คน)',          String(d.workers || '').trim());
+    put_(row, idx, 'คะแนนรายข้อ(JSON)',    JSON.stringify(scores));
+    put_(row, idx, 'คะแนนรวม',            total);
+    put_(row, idx, 'ข้อเสนอแนะ',           String(d.comment || '').trim());
+    put_(row, idx, 'เหตุผลไม่สะดวก',        String(d.reason || '').trim());
+    put_(row, idx, 'บันทึกเมื่อ',           now.toISOString());
+    sheet.appendRow(row);
+
+    return {
+      ok: true, month: monthKey_(), status: status, total: total,
+      duty: { audit: auditDoneMonth_(loc.id, monthKey_()), survey: status === ST_SURVEY_OK }
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * Dashboard: สถานะประเมินรายเดือนของทุกหน่วย
+ * 🔴 QA ผู้ดูแลยังไม่เข้าเยี่ยมเลย / 🟡 เยี่ยมแล้วแต่ฟอร์มไม่ครบ / 🟢 ครบ
+ */
+function apiMonthlyStatus_(p) {
+  requirePin_(p && p.pin);
+  var month = String((p && p.month) || monthKey_()).trim();
+
+  // การเข้าเยี่ยมของเดือนนั้น: locationId → { empCode: วันที่ล่าสุด }
+  var visits = {};
+  scanLog_(SH_LOG, HEAD_LOG, function (r, idx) {
+    var iso = cellIso_(get_(r, idx, 'เข้าเมื่อ'));
+    if (iso.substring(0, 7) !== month) return false;
+    var locId = String(get_(r, idx, 'รหัสหน่วยงาน')).trim();
+    var code  = normCode_(get_(r, idx, 'รหัสพนักงาน'));
+    if (!visits[locId]) visits[locId] = {};
+    var day = cellDate_(get_(r, idx, 'วันที่'));
+    if (!visits[locId][code] || visits[locId][code] < day) visits[locId][code] = day;
+    return false;   // ใช้ scan เป็นตัววนอย่างเดียว ไม่เก็บแถว
+  });
+
+  var employees = readEmployees_();
+  var nameOf = {};
+  for (var e = 0; e < employees.length; e++) nameOf[employees[e].code] = employees[e].name;
+
+  var rows = [];
+  var locations = readLocations_(true);
+  for (var i = 0; i < locations.length; i++) {
+    var l = locations[i];
+    var lastVisit = '';
+    for (var q = 0; q < l.qa.length; q++) {
+      var v = (visits[l.id] || {})[l.qa[q]] || '';
+      if (v > lastVisit) lastVisit = v;
+    }
+    var audit  = auditDoneMonth_(l.id, month);
+    var survey = surveyDoneMonth_(l.id, month);
+    var status = !l.qa.length ? 'noqa'
+               : (audit && survey) ? 'done'
+               : lastVisit ? 'partial'
+               : 'missing';
+    rows.push({
+      locationId: l.id, location: l.name,
+      qaCodes: l.qa,
+      qaNames: l.qa.map(function (c) { return nameOf[c] || c; }),
+      lastVisit: lastVisit, audit: audit, survey: survey, status: status
+    });
+  }
+
+  var order = { missing: 0, partial: 1, noqa: 2, done: 3 };
+  rows.sort(function (a, b) {
+    return (order[a.status] - order[b.status]) || a.location.localeCompare(b.location, 'th');
+  });
+  return { ok: true, month: month, rows: rows };
+}
+
+/** Dashboard: ข้อมูลสำหรับ Export PDF — เลือกเดือน + หน่วย (ว่าง = ทั้งหมด) */
+function apiExportForms_(p) {
+  requirePin_(p && p.pin);
+  var month = String((p && p.month) || monthKey_()).trim();
+  var locId = String((p && p.locationId) || '').trim();
+
+  function pick(rows, headers) {
+    return rows.map(function (x) {
+      var o = {};
+      for (var i = 0; i < headers.length; i++) o[headers[i]] = valOut_(get_(x.row, x.idx, headers[i]));
+      return o;
+    });
+  }
+
+  var match = function (r, idx) {
+    if (String(get_(r, idx, 'เดือน')).trim() !== month) return false;
+    return !locId || String(get_(r, idx, 'รหัสหน่วยงาน')).trim() === locId;
+  };
+
+  return {
+    ok: true, month: month,
+    forms:   readFormConfig_(),
+    surveys: pick(scanLog_(SH_SURVEY, HEAD_SURVEY, match), HEAD_SURVEY),
+    audits:  pick(scanLog_(SH_AUDIT,  HEAD_AUDIT,  match), HEAD_AUDIT),
+    locations: readLocations_(false)
+  };
+}
+
+/** แปลงค่าจากชีตให้พร้อมส่งออก (Date → ข้อความอ่านได้) */
+function valOut_(v) {
+  if (isDate_(v)) {
+    // เดาจากค่า: ปี 1899 = เวลาอย่างเดียว, เที่ยงคืนพอดี = วันที่อย่างเดียว
+    if (v.getFullYear() < 1970) return cellTime_(v);
+    if (v.getHours() === 0 && v.getMinutes() === 0) return cellDate_(v);
+    return cellDate_(v) + ' ' + cellTime_(v);
+  }
+  return v;
+}
+
+
 // ===================== อ่านข้อมูลจากชีต =====================
 
 function readEmployees_() {
@@ -506,10 +892,16 @@ function readLocations_(activeOnly) {
     if (activeOnly && !active) continue;
 
     var radius = Number(get_(r, idx, 'รัศมี(ม.)'));
+
+    // คอลัมน์ QA ผู้ดูแล เป็นคอลัมน์เสริม — ชีตเก่าที่ยังไม่มีก็ใช้งานได้ (ได้ลิสต์ว่าง)
+    var qaRaw = (COL_LOC_QA in idx) ? String(get_(r, idx, COL_LOC_QA)) : '';
+    var qa = qaRaw.split(',').map(normCode_).filter(function (c) { return !!c; });
+
     out.push({
       id: id, name: name, lat: lat, lng: lng,
       radius:  (isFinite(radius) && radius > 0) ? Math.round(radius) : DEFAULT_RADIUS_M,
       address: String(get_(r, idx, 'ที่อยู่/หมายเหตุ')).trim(),
+      qa:      qa,
       active:  active
     });
   }
@@ -810,10 +1202,38 @@ function setup() {
   ensureSheet_(ss, SH_EMP, HEAD_EMP, [
     ['1001', 'ตัวอย่าง พนักงาน', 'ช่างบริการ', 'ใช้งาน']
   ]);
-  ensureSheet_(ss, SH_LOC, HEAD_LOC, [
-    ['LOC-001', 'ตัวอย่าง หน่วยงาน', 13.7563, 100.5018, 200, 'แก้พิกัดให้ตรงหน้างานจริง', 'ใช้งาน']
+  ensureSheet_(ss, SH_LOC, HEAD_LOC.concat([COL_LOC_QA]), [
+    ['LOC-001', 'ตัวอย่าง หน่วยงาน', 13.7563, 100.5018, 200, 'แก้พิกัดให้ตรงหน้างานจริง', 'ใช้งาน', '']
   ]);
   ensureSheet_(ss, SH_LOG, HEAD_LOG, []);
+
+  // เฟส 2: แบบประเมินประจำเดือน — ข้อคำถามตั้งต้นตามแบบฟอร์มกระดาษจริง
+  ensureSheet_(ss, SH_CFG, HEAD_CFG, [
+    // แบบตรวจมาตรฐานการปฏิบัติงานประจำหน่วยงาน (ปกติ/ปรับปรุง)
+    ['audit', 1,  'สถานะการทำงานของพนักงาน', 'อัตรากำลังพลครบตามสัญญา', 'ใช้งาน'],
+    ['audit', 2,  'สถานะการทำงานของพนักงาน', 'การแต่งกาย / ยูนิฟอร์ม', 'ใช้งาน'],
+    ['audit', 3,  'สถานะการทำงานของพนักงาน', 'ความประพฤติและกิริยามารยาท / การบริการ', 'ใช้งาน'],
+    ['audit', 4,  'สถานะการทำงานของพนักงาน', 'การปฏิบัติงาน / ความรู้ความเข้าใจในงาน', 'ใช้งาน'],
+    ['audit', 5,  'คุณภาพงานความสะอาด', 'พื้นที่ทั่วไป: ประตู, หน้าต่าง, ทางเดิน, เพดาน, ผนัง', 'ใช้งาน'],
+    ['audit', 6,  'คุณภาพงานความสะอาด', 'เฟอร์นิเจอร์: โต๊ะ, เก้าอี้, โซฟา, ตู้', 'ใช้งาน'],
+    ['audit', 7,  'คุณภาพงานความสะอาด', 'ห้องน้ำ: ผนัง, พื้น, เคาน์เตอร์, อ่างล้างมือ, กระจกเงา', 'ใช้งาน'],
+    ['audit', 8,  'คุณภาพงานความสะอาด', 'ห้องน้ำ: สุขภัณฑ์ / กลิ่น', 'ใช้งาน'],
+    ['audit', 9,  'คุณภาพงานความสะอาด', 'อุปกรณ์ / น้ำยาทำความสะอาด', 'ใช้งาน'],
+    ['audit', 10, 'คุณภาพงานความสะอาด', 'อื่น ๆ', 'ใช้งาน'],
+    // แบบประเมินความพึงพอใจการบริการทำความสะอาด FM-OP04-03 REV.03 (คะแนน 1-10)
+    ['survey', 1,  '', 'ความสะอาดของพื้นที่บริการ / ห้องแม่บ้าน', 'ใช้งาน'],
+    ['survey', 2,  '', 'ความพร้อมของเครื่องมืออุปกรณ์และผลิตภัณฑ์', 'ใช้งาน'],
+    ['survey', 3,  '', 'ความครบถ้วนของจำนวนพนักงาน', 'ใช้งาน'],
+    ['survey', 4,  '', 'กริยามารยาท / การแต่งกายของพนักงาน', 'ใช้งาน'],
+    ['survey', 5,  '', 'ความรู้ความสามารถของพนักงาน', 'ใช้งาน'],
+    ['survey', 6,  '', 'ความรู้ความสามารถของหัวหน้างาน', 'ใช้งาน'],
+    ['survey', 7,  '', 'ความสะดวกรวดเร็วในการประสานงานจากบริษัท ฯ', 'ใช้งาน'],
+    ['survey', 8,  '', 'ความรวดเร็วในการแก้ไข', 'ใช้งาน'],
+    ['survey', 9,  '', 'ความสม่ำเสมอในการเข้าตรวจสอบของบริษัทฯ', 'ใช้งาน'],
+    ['survey', 10, '', 'ความสามารถในการดำเนินงานตามระบบ ISO', 'ใช้งาน']
+  ]);
+  ensureSheet_(ss, SH_SURVEY, HEAD_SURVEY, []);
+  ensureSheet_(ss, SH_AUDIT,  HEAD_AUDIT,  []);
 
   // ลบแท็บเปล่าที่ Google สร้างมาให้ตอนสร้างไฟล์ใหม่
   var blank = ss.getSheetByName('Sheet1') || ss.getSheetByName('ชีต1');

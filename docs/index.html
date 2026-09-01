@@ -163,6 +163,13 @@
       <div class="hint mt">เช็คเอาท์ไม่บังคับว่าต้องอยู่ในพื้นที่ แต่ระบบจะบันทึกพิกัดไว้เป็นหลักฐาน</div>
     </div>
 
+    <!-- แบบประเมินประจำเดือน — แสดงเฉพาะ QA ที่เช็คเอาท์จากหน่วยที่ตนดูแล -->
+    <div class="card hide" id="coDuty">
+      <div class="q">📋 แบบประเมินประจำเดือน <span class="tag" id="dutyMonth"></span></div>
+      <div id="dutyList"></div>
+      <div class="hint mt">หน่วยงานนี้ต้องประเมินเดือนละครั้ง — ทำให้ครบก่อนจึงจะเช็คเอาท์ได้</div>
+    </div>
+
     <div class="card">
       <div class="q">รูปถ่าย (ไม่บังคับ)</div>
       <div class="photo-actions" id="coPhotoPick">
@@ -186,7 +193,148 @@
     </div>
 
     <button class="btn amber" id="btnCheckout">เช็คเอาท์</button>
+    <div class="hint mt center" id="coReady"></div>
     <div style="height:26px"></div>
+  </div>
+
+  <!-- ============ 5.1 แบบตรวจมาตรฐานการปฏิบัติงาน (QA กรอกเอง) ============ -->
+  <div id="scAudit" class="hide">
+    <div class="head">
+      <div class="row" style="justify-content:space-between">
+        <div>
+          <h1>📋 แบบตรวจมาตรฐานการปฏิบัติงาน</h1>
+          <p id="auWhere"></p>
+        </div>
+        <button class="btn gray sm" id="btnAuBack">ย้อนกลับ</button>
+      </div>
+    </div>
+
+    <div class="box err hide" id="auErr"></div>
+
+    <div class="card">
+      <div class="q">ข้อมูลหน้างาน</div>
+      <div class="fldgrp">
+        <label class="fld">จำนวนพนักงานประจำจุด</label>
+        <input type="number" id="auStaff" inputmode="numeric" placeholder="เช่น 5">
+      </div>
+      <div class="fldgrp">
+        <label class="fld">ผู้ประสานงานหน้างาน</label>
+        <input type="text" id="auCoord" placeholder="ชื่อผู้ประสานงาน">
+      </div>
+      <div class="fldgrp" style="margin-bottom:0">
+        <label class="fld">ผู้ว่าจ้าง</label>
+        <input type="text" id="auEmployer" placeholder="ชื่อผู้ว่าจ้าง / บริษัท">
+      </div>
+    </div>
+
+    <div id="auQuestions"></div>
+
+    <div class="card">
+      <div class="q">ปัญหาที่พบ / ข้อเสนอแนะ และแนวทางแก้ไข</div>
+      <textarea id="auIssues" placeholder="ไม่บังคับ"></textarea>
+    </div>
+
+    <button class="btn" id="btnAuSubmit">ส่งแบบตรวจมาตรฐาน</button>
+    <div class="hint mt center" id="auReady"></div>
+    <div style="height:26px"></div>
+  </div>
+
+  <!-- ============ 5.2 แบบประเมินพึงพอใจ — หน้าเตรียมส่งเครื่อง ============ -->
+  <div id="scSvIntro" class="hide">
+    <div class="head">
+      <div class="row" style="justify-content:space-between">
+        <div>
+          <h1>⭐ แบบประเมินความพึงพอใจ</h1>
+          <p id="svWhere"></p>
+        </div>
+        <button class="btn gray sm" id="btnSvBack">ย้อนกลับ</button>
+      </div>
+    </div>
+
+    <div class="box err hide" id="svErr"></div>
+
+    <div class="card">
+      <div class="q">ข้อมูลประกอบ (QA กรอกก่อนส่งเครื่อง — ไม่บังคับ)</div>
+      <div class="fldgrp">
+        <label class="fld">พื้นที่ / อาคาร / ชั้น</label>
+        <input type="text" id="svArea" placeholder="เช่น อาคาร A ชั้น 3">
+      </div>
+      <div class="row">
+        <div style="flex:1">
+          <label class="fld">พนักงานทั้งหมด (คน)</label>
+          <input type="number" id="svTotal" inputmode="numeric">
+        </div>
+        <div style="flex:1">
+          <label class="fld">หัวหน้างาน (คน)</label>
+          <input type="number" id="svHeads" inputmode="numeric">
+        </div>
+        <div style="flex:1">
+          <label class="fld">พนักงาน (คน)</label>
+          <input type="number" id="svWorkers" inputmode="numeric">
+        </div>
+      </div>
+    </div>
+
+    <div class="card center">
+      <div style="font-size:44px">📱👉🤝</div>
+      <p class="hint mt" style="font-size:14px">
+        กดปุ่มด้านล่างแล้ว<b style="color:#e2e8f0">ยื่นเครื่องให้ลูกค้า</b>เป็นผู้ให้คะแนนเอง<br>
+        หน้าจอจะล็อกอยู่ที่แบบประเมิน ออกได้ต้องใส่รหัสพนักงานของคุณ
+      </p>
+      <button class="btn mt" id="btnSvStart">เริ่มประเมิน — ส่งเครื่องให้ลูกค้า</button>
+      <button class="btn gray mt" id="btnSvSkip">ลูกค้าไม่สะดวกประเมินวันนี้</button>
+      <div class="hint mt">ถ้าลูกค้าไม่สะดวก ระบบจะปลดล็อกเช็คเอาท์เฉพาะวันนี้<br>แต่เดือนนี้ยังถือว่าค้างประเมิน ต้องกลับมาทำภายหลัง</div>
+    </div>
+    <div style="height:26px"></div>
+  </div>
+
+  <!-- ============ 5.3 โหมดลูกค้า (ลูกค้าถือเครื่องกดเอง) ============ -->
+  <div id="scSvForm" class="hide">
+    <div class="head" style="border-top-color:#4299e1">
+      <h1>⭐ แบบประเมินความพึงพอใจการบริการทำความสะอาด</h1>
+      <p id="svFormOrg"></p>
+      <p class="hint mt">กรุณาให้คะแนนตามระดับความพึงพอใจที่ท่านได้รับ<br>
+        <span style="color:#fc8181">ปรับปรุง 1–4</span> ·
+        <span style="color:#fbd38d">พอใช้ 5–7</span> ·
+        <span style="color:#9ae6b4">ดี 8–10</span></p>
+    </div>
+
+    <div id="svQuestions"></div>
+
+    <div class="card">
+      <div class="q">ข้อเสนอแนะเพิ่มเติม</div>
+      <textarea id="svComment" placeholder="สิ่งที่ต้องการให้ปรับปรุงแก้ไข / พัฒนา (ไม่บังคับ)"></textarea>
+    </div>
+
+    <div class="card">
+      <div class="q">ผู้ประเมิน (ไม่บังคับ)</div>
+      <div class="fldgrp">
+        <label class="fld">ชื่อ-นามสกุล</label>
+        <input type="text" id="svRater" autocomplete="off">
+      </div>
+      <div class="fldgrp" style="margin-bottom:0">
+        <label class="fld">ตำแหน่ง</label>
+        <input type="text" id="svRaterPos" autocomplete="off">
+      </div>
+    </div>
+
+    <button class="btn" id="btnSvSubmit" disabled>ส่งแบบประเมิน</button>
+    <div class="hint mt center" id="svProgress"></div>
+    <div class="center mt">
+      <button class="btn gray sm" id="btnSvExit">🔒 เจ้าหน้าที่: ออกจากแบบประเมิน</button>
+    </div>
+    <div style="height:26px"></div>
+  </div>
+
+  <!-- ============ 5.4 ขอบคุณ (ลูกค้าเห็นหลังส่ง) ============ -->
+  <div id="scSvThanks" class="hide">
+    <div class="card done">
+      <div class="big">🙏</div>
+      <h2 style="color:#63b3ed">ขอบคุณสำหรับการประเมิน</h2>
+      <p class="hint mt" style="font-size:14px">บริษัทฯ จะนำข้อมูลที่ได้รับไปพัฒนาการบริการให้ดียิ่งขึ้น<br><br>
+        <b style="color:#e2e8f0">กรุณาส่งเครื่องคืนให้เจ้าหน้าที่</b></p>
+      <button class="btn mt" id="btnSvReturn">🔒 เจ้าหน้าที่รับเครื่องคืน</button>
+    </div>
   </div>
 
   <!-- ============ 6. สำเร็จ ============ -->
@@ -215,10 +363,17 @@ var S = {
   photo: null,        // รูปเช็คอิน
   coLog: null,        // รายการที่กำลังเช็คเอาท์
   coPhoto: null,
-  search: ''
+  search: '',
+  duty: null,         // สถานะแบบประเมินรายเดือน (เฉพาะ QA): {locId: {audit, survey}}
+  month: '',
+  formCfg: null,      // ข้อคำถามจาก FormConfig (โหลดครั้งเดียว)
+  auAns: {},          // คำตอบแบบตรวจ {order: 'ปกติ'|'ปรับปรุง'}
+  auRemarks: {},
+  svScores: {}        // คะแนนลูกค้า {order: 1-10}
 };
 
-var SCREENS = ['scBlock', 'scLogin', 'scHome', 'scCheckin', 'scCheckout', 'scDone', 'scLoad'];
+var SCREENS = ['scBlock', 'scLogin', 'scHome', 'scCheckin', 'scCheckout',
+               'scAudit', 'scSvIntro', 'scSvForm', 'scSvThanks', 'scDone', 'scLoad'];
 
 function show(id) {
   SCREENS.forEach(function (s) { document.getElementById(s).classList.add('hide'); });
@@ -288,6 +443,8 @@ function login(code, silent) {
       S.emp       = res.employee;
       S.locations = res.locations || [];
       S.open      = res.open || [];
+      S.duty      = res.duty || null;
+      S.month     = res.month || '';
       store.set('empCode', S.emp.code);
       renderHome();
       show('scHome');
@@ -358,6 +515,8 @@ function refreshHome() {
     .then(function (res) {
       S.locations = res.locations || [];
       S.open      = res.open || [];
+      S.duty      = res.duty || null;
+      S.month     = res.month || '';
       renderHome();
       show('scHome');
     })
@@ -661,6 +820,7 @@ function openCheckout(log) {
   show('scCheckout');
   Geo.start(onGeoChange);
   renderGps('coGps', false);
+  renderDuty();
 }
 
 document.getElementById('btnCoBack').onclick = function () {
@@ -671,6 +831,7 @@ document.getElementById('btnCoBack').onclick = function () {
 document.getElementById('btnCheckout').onclick = function () {
   var btn = this;
   setErr('coErr', '');
+  if (!dutyOK()) { renderDuty(); return; }
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> กำลังบันทึก…';
 
@@ -704,6 +865,295 @@ document.getElementById('btnCheckout').onclick = function () {
     });
 };
 
+
+// ===================== แบบประเมินประจำเดือน (เฉพาะ QA) =====================
+
+/** duty ของหน่วยที่กำลังเช็คเอาท์ — null ถ้าไม่เข้าเงื่อนไข */
+function curDuty() {
+  if (!S.duty || !S.coLog) return null;
+  return S.duty[S.coLog.locationId] || null;
+}
+
+/** เช็คเอาท์ได้หรือยัง (ฝั่งเซิร์ฟเวอร์ตรวจซ้ำอีกชั้นเสมอ) */
+function dutyOK() {
+  var d = curDuty();
+  if (!d) return true;
+  return d.audit && (d.survey || S.coLog.surveySkipped);
+}
+
+function thaiMonth(key) {
+  var m = ['', 'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
+           'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
+  var p = String(key || '').split('-');
+  return p.length === 2 ? (m[+p[1]] + ' ' + (+p[0] + 543)) : key;
+}
+
+/** การ์ดด่านประเมินในหน้าเช็คเอาท์ */
+function renderDuty() {
+  var card = document.getElementById('coDuty');
+  var d = curDuty();
+  var btn = document.getElementById('btnCheckout');
+  var msg = document.getElementById('coReady');
+
+  if (!d) {
+    card.classList.add('hide');
+    btn.disabled = false;
+    msg.textContent = '';
+    return;
+  }
+
+  card.classList.remove('hide');
+  document.getElementById('dutyMonth').textContent = thaiMonth(S.month);
+
+  function item(icon, name, done, doneText, btnHtml) {
+    return '<div class="loc" style="cursor:default;margin-bottom:8px">' +
+      '<div class="ic">' + icon + '</div>' +
+      '<div class="grow"><div class="nm">' + name + '</div>' +
+      '<div class="meta">' + (done ? '<span style="color:#9ae6b4">✓ ' + doneText + '</span>' : 'ยังไม่ได้ทำในเดือนนี้') + '</div></div>' +
+      (done ? '<span class="badge in">เสร็จแล้ว</span>' : btnHtml) +
+    '</div>';
+  }
+
+  var surveyDone = d.survey;
+  var surveySkip = !surveyDone && S.coLog.surveySkipped;
+  var html =
+    item('📋', 'แบบตรวจมาตรฐานการปฏิบัติงาน', d.audit, 'ตรวจแล้วเดือนนี้',
+         '<button class="btn sm" id="btnGoAudit">ทำเลย</button>') +
+    (surveySkip
+      ? '<div class="loc" style="cursor:default;margin-bottom:8px"><div class="ic">⭐</div>' +
+        '<div class="grow"><div class="nm">แบบประเมินความพึงพอใจ</div>' +
+        '<div class="meta"><span style="color:#fbd38d">บันทึก "ลูกค้าไม่สะดวก" แล้ว — เดือนนี้ยังค้างประเมิน ต้องกลับมาทำภายหลัง</span></div></div>' +
+        '<span class="badge na">ผ่อนผันวันนี้</span></div>'
+      : item('⭐', 'แบบประเมินความพึงพอใจ (ลูกค้ากดเอง)', surveyDone, 'ลูกค้าประเมินแล้วเดือนนี้',
+             '<button class="btn sm" id="btnGoSurvey">ทำเลย</button>'));
+
+  document.getElementById('dutyList').innerHTML = html;
+
+  var b1 = document.getElementById('btnGoAudit');
+  if (b1) b1.onclick = openAudit;
+  var b2 = document.getElementById('btnGoSurvey');
+  if (b2) b2.onclick = openSvIntro;
+
+  var ok = dutyOK();
+  btn.disabled = !ok;
+  msg.innerHTML = ok ? '' : esc('ยังเช็คเอาท์ไม่ได้ — ทำแบบประเมินประจำเดือนด้านบนให้ครบก่อน');
+}
+
+/** โหลดข้อคำถามครั้งเดียวแล้วจำไว้ */
+function loadFormCfg() {
+  if (S.formCfg) return Promise.resolve(S.formCfg);
+  return apiGet({ action: 'formConfig' }).then(function (res) {
+    S.formCfg = res.forms;
+    return S.formCfg;
+  });
+}
+
+// ---------- 1) แบบตรวจมาตรฐาน (QA กรอกเอง) ----------
+
+function openAudit() {
+  S.auAns = {}; S.auRemarks = {};
+  ['auStaff', 'auCoord', 'auEmployer', 'auIssues'].forEach(function (id) {
+    document.getElementById(id).value = '';
+  });
+  document.getElementById('auWhere').textContent = S.coLog.location + ' · ' + thaiMonth(S.month);
+  setErr('auErr', '');
+  show('scLoad');
+
+  loadFormCfg()
+    .then(function (cfg) {
+      var html = '', lastSection = null;
+      cfg.audit.forEach(function (q) {
+        if (q.section && q.section !== lastSection) {
+          html += '<div class="card" style="padding:10px 18px;margin-bottom:10px"><b>หัวข้อ: ' + esc(q.section) + '</b></div>';
+          lastSection = q.section;
+        }
+        html += '<div class="card" data-q="' + q.order + '">' +
+          '<div style="font-size:15px;margin-bottom:10px">' + q.order + '. ' + esc(q.question) + '</div>' +
+          '<div class="row">' +
+            '<button type="button" class="btn ghost sm" style="flex:1" data-au="' + q.order + '" data-v="ปกติ">✔ ปกติ</button>' +
+            '<button type="button" class="btn ghost sm" style="flex:1;border-color:#ed8936;color:#ed8936" data-au="' + q.order + '" data-v="ปรับปรุง">✘ ปรับปรุง</button>' +
+          '</div>' +
+          '<input type="text" class="mt hide" id="auRm' + q.order + '" placeholder="หมายเหตุ / สิ่งที่ต้องปรับปรุง">' +
+        '</div>';
+      });
+      document.getElementById('auQuestions').innerHTML = html;
+
+      document.querySelectorAll('[data-au]').forEach(function (b) {
+        b.onclick = function () {
+          var order = b.getAttribute('data-au'), v = b.getAttribute('data-v');
+          S.auAns[order] = v;
+          var box = document.querySelector('[data-q="' + order + '"]');
+          box.querySelectorAll('[data-au]').forEach(function (x) {
+            var on = x === b;
+            x.classList.toggle('ghost', !on);
+            if (x.getAttribute('data-v') === 'ปกติ') {
+              x.style.background = on ? '#2f855a' : 'transparent';
+              x.style.color = on ? '#fff' : '#38b2ac';
+            } else {
+              x.style.background = on ? '#c05621' : 'transparent';
+              x.style.color = on ? '#fff' : '#ed8936';
+            }
+          });
+          document.getElementById('auRm' + order).classList.toggle('hide', v !== 'ปรับปรุง');
+          renderAuReady(S.formCfg.audit.length);
+        };
+      });
+
+      renderAuReady(cfg.audit.length);
+      show('scAudit');
+    })
+    .catch(function (e) { show('scCheckout'); setErr('coErr', e.message); });
+}
+
+function renderAuReady(totalQ) {
+  var answered = Object.keys(S.auAns).length;
+  var btn = document.getElementById('btnAuSubmit');
+  btn.disabled = answered < totalQ;
+  document.getElementById('auReady').textContent =
+    answered < totalQ ? 'ตอบแล้ว ' + answered + '/' + totalQ + ' ข้อ' : 'ครบทุกข้อแล้ว ✓';
+}
+
+document.getElementById('btnAuBack').onclick = function () { show('scCheckout'); renderDuty(); };
+
+document.getElementById('btnAuSubmit').onclick = function () {
+  var btn = this;
+  setErr('auErr', '');
+  S.formCfg.audit.forEach(function (q) {
+    var rm = document.getElementById('auRm' + q.order);
+    if (rm && rm.value.trim()) S.auRemarks[q.order] = rm.value.trim();
+  });
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> กำลังบันทึก…';
+  apiPost({
+    action: 'submitAudit', empCode: S.emp.code, locationId: S.coLog.locationId, logId: S.coLog.logId,
+    answers: S.auAns, remarks: S.auRemarks,
+    staffCount: document.getElementById('auStaff').value.trim(),
+    coordinator: document.getElementById('auCoord').value.trim(),
+    employer: document.getElementById('auEmployer').value.trim(),
+    issues: document.getElementById('auIssues').value.trim()
+  })
+  .then(function (res) {
+    S.duty[S.coLog.locationId] = res.duty;
+    show('scCheckout'); renderDuty();
+  })
+  .catch(function (e) { setErr('auErr', e.message); })
+  .then(function () { btn.disabled = false; btn.textContent = 'ส่งแบบตรวจมาตรฐาน'; });
+};
+
+// ---------- 2) แบบประเมินพึงพอใจ (ลูกค้ากดเอง) ----------
+
+function openSvIntro() {
+  setErr('svErr', '');
+  document.getElementById('svWhere').textContent = S.coLog.location + ' · ' + thaiMonth(S.month);
+  show('scSvIntro');
+}
+
+document.getElementById('btnSvBack').onclick = function () { show('scCheckout'); renderDuty(); };
+
+document.getElementById('btnSvSkip').onclick = function () {
+  var reason = prompt('เหตุผลที่ลูกค้าไม่สะดวกประเมินวันนี้ เช่น ผู้ประสานงานไม่อยู่');
+  if (reason == null) return;
+  if (!reason.trim()) return alert('กรุณาระบุเหตุผล');
+
+  apiPost({ action: 'submitSurvey', empCode: S.emp.code, locationId: S.coLog.locationId,
+            logId: S.coLog.logId, unavailable: true, reason: reason.trim() })
+    .then(function () {
+      S.coLog.surveySkipped = true;
+      show('scCheckout'); renderDuty();
+    })
+    .catch(function (e) { setErr('svErr', e.message); });
+};
+
+document.getElementById('btnSvStart').onclick = function () {
+  S.svScores = {};
+  document.getElementById('svComment').value = '';
+  document.getElementById('svRater').value = '';
+  document.getElementById('svRaterPos').value = '';
+  document.getElementById('svFormOrg').textContent = ORG_NAME + ' · ' + S.coLog.location;
+  show('scLoad');
+
+  loadFormCfg()
+    .then(function (cfg) {
+      var html = '';
+      cfg.survey.forEach(function (q) {
+        var btns = '';
+        for (var s = 1; s <= 10; s++) {
+          var color = s <= 4 ? '#fc8181' : s <= 7 ? '#ed8936' : '#48bb78';
+          btns += '<button type="button" data-sv="' + q.order + '" data-s="' + s +
+                  '" style="flex:1;min-width:0;padding:12px 0;font-size:16px;font-weight:700;font-family:inherit;' +
+                  'border-radius:8px;border:1px solid ' + color + ';background:transparent;color:' + color +
+                  ';cursor:pointer">' + s + '</button>';
+        }
+        html += '<div class="card" data-svq="' + q.order + '">' +
+          '<div style="font-size:15.5px;margin-bottom:12px;line-height:1.5">' + q.order + '. ' + esc(q.question) + '</div>' +
+          '<div style="display:flex;gap:5px">' + btns + '</div>' +
+        '</div>';
+      });
+      document.getElementById('svQuestions').innerHTML = html;
+
+      document.querySelectorAll('[data-sv]').forEach(function (b) {
+        b.onclick = function () {
+          var order = b.getAttribute('data-sv'), s = +b.getAttribute('data-s');
+          S.svScores[order] = s;
+          document.querySelectorAll('[data-sv="' + order + '"]').forEach(function (x) {
+            var xs = +x.getAttribute('data-s');
+            var color = xs <= 4 ? '#fc8181' : xs <= 7 ? '#ed8936' : '#48bb78';
+            var on = xs === s;
+            x.style.background = on ? color : 'transparent';
+            x.style.color = on ? '#0f1623' : color;
+          });
+          renderSvReady();
+        };
+      });
+
+      renderSvReady();
+      show('scSvForm');
+    })
+    .catch(function (e) { show('scSvIntro'); setErr('svErr', e.message); });
+};
+
+function renderSvReady() {
+  var total = S.formCfg.survey.length;
+  var done = Object.keys(S.svScores).length;
+  document.getElementById('btnSvSubmit').disabled = done < total;
+  document.getElementById('svProgress').textContent =
+    done < total ? 'ให้คะแนนแล้ว ' + done + '/' + total + ' ข้อ' : 'ครบทุกข้อแล้ว — กดส่งแบบประเมินได้เลย';
+}
+
+/** ออกจากโหมดลูกค้า ต้องใส่รหัสพนักงาน QA */
+function svExit(target) {
+  var code = prompt('ใส่รหัสพนักงานของเจ้าหน้าที่เพื่อออกจากแบบประเมิน');
+  if (code == null) return;
+  if (code.trim() !== S.emp.code) return alert('รหัสไม่ถูกต้อง');
+  show(target); renderDuty();
+}
+document.getElementById('btnSvExit').onclick   = function () { svExit('scSvIntro'); };
+document.getElementById('btnSvReturn').onclick = function () { svExit('scCheckout'); };
+
+document.getElementById('btnSvSubmit').onclick = function () {
+  var btn = this;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> กำลังส่ง…';
+
+  apiPost({
+    action: 'submitSurvey', empCode: S.emp.code, locationId: S.coLog.locationId, logId: S.coLog.logId,
+    scores: S.svScores,
+    comment: document.getElementById('svComment').value.trim(),
+    rater: document.getElementById('svRater').value.trim(),
+    raterPosition: document.getElementById('svRaterPos').value.trim(),
+    area: document.getElementById('svArea').value.trim(),
+    totalStaff: document.getElementById('svTotal').value.trim(),
+    heads: document.getElementById('svHeads').value.trim(),
+    workers: document.getElementById('svWorkers').value.trim()
+  })
+  .then(function (res) {
+    S.duty[S.coLog.locationId] = res.duty;
+    show('scSvThanks');
+  })
+  .catch(function (e) { alert('ส่งไม่สำเร็จ: ' + e.message); })
+  .then(function () { btn.disabled = false; btn.textContent = 'ส่งแบบประเมิน'; });
+};
 
 // ===================== หน้าสำเร็จ =====================
 function showDone(icon, title, pairs) {

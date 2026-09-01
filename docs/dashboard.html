@@ -120,6 +120,34 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 
     <div class="tiles" id="tiles"></div>
 
+    <!-- สถานะแบบประเมินประจำเดือน (เฟส 2) -->
+    <div class="card noprint">
+      <div class="row" style="justify-content:space-between;flex-wrap:wrap;margin-bottom:12px">
+        <div class="q" style="margin-bottom:0">📅 สถานะประเมินประจำเดือน</div>
+        <div class="row">
+          <input type="month" id="qaMonth" style="width:auto">
+          <button class="btn sm" id="btnQaExport">📄 Export PDF</button>
+        </div>
+      </div>
+      <div class="tblwrap">
+        <table style="min-width:680px">
+          <thead>
+            <tr>
+              <th>สถานะ</th><th>หน่วยงาน</th><th>QA ผู้ดูแล</th>
+              <th>เยี่ยมล่าสุด</th><th>ตรวจมาตรฐาน</th><th>พึงพอใจ</th>
+            </tr>
+          </thead>
+          <tbody id="qaBody">
+            <tr><td colspan="6" class="center muted" style="padding:18px">กำลังโหลด…</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="hint mt">
+        🔴 QA ยังไม่เข้าเยี่ยมเดือนนี้ · 🟡 เยี่ยมแล้วแต่ประเมินยังไม่ครบ · 🟢 ครบแล้ว ·
+        ⚪ ยังไม่กำหนด QA ผู้ดูแล (ตั้งได้ที่คอลัมน์ "QA ผู้ดูแล" ในชีต Locations)
+      </div>
+    </div>
+
     <div class="card noprint">
       <div class="q">🗺️ จุดเช็คอิน</div>
       <div id="map"></div>
@@ -210,6 +238,7 @@ function loadData() {
 
       document.getElementById('subHead').textContent = 'ข้อมูลล่าสุด ' + res.fetchedAt + ' น.';
       render();
+      loadQaStatus();
     });
 }
 
@@ -418,6 +447,259 @@ function kv(k, v) {
   return '<div class="kv"><span class="k">' + esc(k) + '</span><span class="v">' + esc(v) + '</span></div>';
 }
 function closeDetail() { document.getElementById('modalHost').innerHTML = ''; }
+
+// ===================== สถานะประเมินประจำเดือน (เฟส 2) =====================
+
+function curQaMonth() {
+  var el = document.getElementById('qaMonth');
+  if (!el.value) {
+    var d = new Date();
+    el.value = d.getFullYear() + '-' + pad2(d.getMonth() + 1);
+  }
+  return el.value;
+}
+
+function thaiMonth(key) {
+  var m = ['', 'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
+           'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
+  var p = String(key || '').split('-');
+  return p.length === 2 ? (m[+p[1]] + ' ' + (+p[0] + 543)) : key;
+}
+
+function loadQaStatus() {
+  var month = curQaMonth();
+  apiGet({ action: 'monthlyStatus', pin: D.pin, month: month })
+    .then(function (res) { renderQaStatus(res.rows || []); })
+    .catch(function (e) {
+      document.getElementById('qaBody').innerHTML =
+        '<tr><td colspan="6" class="center muted" style="padding:18px">โหลดไม่สำเร็จ: ' + esc(e.message) + '</td></tr>';
+    });
+}
+
+document.getElementById('qaMonth').onchange = loadQaStatus;
+
+function renderQaStatus(rows) {
+  var tb = document.getElementById('qaBody');
+  if (!rows.length) {
+    tb.innerHTML = '<tr><td colspan="6" class="center muted" style="padding:18px">ยังไม่มีหน่วยงานในระบบ</td></tr>';
+    return;
+  }
+  var chip = {
+    missing: '<span class="tag miss">🔴 ยังไม่เข้าเยี่ยม</span>',
+    partial: '<span class="tag" style="background:rgba(237,137,54,.18);color:#fbd38d">🟡 ประเมินไม่ครบ</span>',
+    done:    '<span class="tag live">🟢 ครบแล้ว</span>',
+    noqa:    '<span class="tag">⚪ ไม่มี QA</span>'
+  };
+  tb.innerHTML = rows.map(function (r) {
+    return '<tr>' +
+      '<td>' + chip[r.status] + '</td>' +
+      '<td>' + esc(r.location) + '</td>' +
+      '<td>' + (r.qaNames.length ? esc(r.qaNames.join(', ')) : '<span class="muted">—</span>') + '</td>' +
+      '<td>' + (r.lastVisit ? esc(r.lastVisit) : '<span class="muted">—</span>') + '</td>' +
+      '<td>' + (r.audit ? '✅' : '—') + '</td>' +
+      '<td>' + (r.survey ? '✅' : '—') + '</td>' +
+    '</tr>';
+  }).join('');
+}
+
+// ===================== Export แบบประเมินเป็น PDF =====================
+
+document.getElementById('btnQaExport').onclick = function () {
+  var month = curQaMonth();
+  var locId = document.getElementById('fLoc').value;   // ใช้ตัวกรองหน่วยงานเดิม: ว่าง = ทั้งหมด
+  var btn = this;
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
+
+  apiGet({ action: 'exportForms', pin: D.pin, month: month, locationId: locId })
+    .then(function (res) { openFormPrint(res, month, locId); })
+    .catch(function (e) { alert('Export ไม่สำเร็จ: ' + e.message); })
+    .then(function () { btn.disabled = false; btn.textContent = '📄 Export PDF'; });
+};
+
+/** สร้างหน้าพิมพ์รูปแบบเดียวกับแบบฟอร์มกระดาษ แล้วเปิดให้สั่งพิมพ์/บันทึกเป็น PDF */
+function openFormPrint(data, month, onlyLoc) {
+  var locs = (data.locations || []).filter(function (l) {
+    if (onlyLoc) return l.id === onlyLoc;
+    return l.active;
+  });
+
+  // จัดกลุ่มผลตามหน่วยงาน — ใช้ผลล่าสุดของเดือน
+  function latest(rows, locId, extra) {
+    var hit = null;
+    rows.forEach(function (r) {
+      if (String(r['รหัสหน่วยงาน']) !== locId) return;
+      if (extra && !extra(r)) return;
+      if (!hit || String(r['บันทึกเมื่อ']) > String(hit['บันทึกเมื่อ'])) hit = r;
+    });
+    return hit;
+  }
+
+  var pages = '';
+  locs.forEach(function (l) {
+    var au = latest(data.audits, l.id);
+    var sv = latest(data.surveys, l.id, function (r) { return r['สถานะ'] === 'ประเมินแล้ว'; });
+    var skips = (data.surveys || []).filter(function (r) {
+      return String(r['รหัสหน่วยงาน']) === l.id && r['สถานะ'] === 'ลูกค้าไม่สะดวก';
+    });
+    pages += auditPage(l, au, data.forms.audit, month);
+    pages += surveyPage(l, sv, skips, data.forms.survey, month);
+  });
+
+  if (!pages) return alert('ไม่มีหน่วยงานให้พิมพ์');
+
+  var css =
+    '<style>' +
+    '@page{size:A4;margin:14mm}' +
+    '*{margin:0;padding:0;box-sizing:border-box}' +
+    'body{font-family:"Sarabun","TH Sarabun New",sans-serif;font-size:13.5px;color:#000;background:#fff}' +
+    '.page{page-break-after:always;padding:4px 0}' +
+    '.page:last-child{page-break-after:auto}' +
+    'h1{font-size:17px;text-align:center;margin-bottom:2px}' +
+    '.sub{text-align:center;font-size:13.5px;margin-bottom:10px}' +
+    'table{width:100%;border-collapse:collapse;margin-bottom:10px}' +
+    'th,td{border:1px solid #000;padding:5px 7px;text-align:left;vertical-align:top}' +
+    'th{background:#eee;font-weight:600;text-align:center}' +
+    '.c{text-align:center}.b{font-weight:700}' +
+    '.mark{font-size:15px;font-weight:700}' +
+    '.lines{margin:8px 0 14px}' +
+    '.lines div{border-bottom:1px dotted #888;height:22px;line-height:22px;font-size:13px}' +
+    '.sig{display:flex;justify-content:space-around;margin-top:26px;text-align:center;font-size:13px}' +
+    '.sig div{width:42%}' +
+    '.sigline{border-bottom:1px dotted #000;height:26px;margin-bottom:5px}' +
+    '.empty{border:1px dashed #999;text-align:center;padding:34px 10px;color:#555;font-size:15px;margin-bottom:10px}' +
+    '.meta{font-size:12px;color:#444;margin-bottom:8px}' +
+    '</style>';
+
+  var w = window.open('', '_blank');
+  if (!w) return alert('เบราว์เซอร์บล็อกป๊อปอัป — กรุณาอนุญาตป๊อปอัปสำหรับเว็บนี้แล้วลองใหม่');
+  w.document.write('<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8">' +
+    '<title>แบบประเมิน ' + esc(thaiMonth(month)) + '</title>' +
+    '<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">' +
+    css + '</head><body>' + pages +
+    '<script>window.onload=function(){setTimeout(function(){window.print();},400);};<\/script>' +
+    '</body></html>');
+  w.document.close();
+}
+
+/** หน้าแบบตรวจมาตรฐานการปฏิบัติงาน */
+function auditPage(loc, row, questions, month) {
+  var head =
+    '<div class="page">' +
+    '<h1>แบบตรวจมาตรฐานการปฏิบัติงานประจำหน่วยงาน</h1>' +
+    '<div class="sub">' + esc(ORG_NAME) + ' · ประจำเดือน ' + esc(thaiMonth(month)) + '</div>';
+
+  if (!row) {
+    return head + '<div class="empty">— ยังไม่ได้ตรวจประเมินในเดือนนี้ —<br>' +
+      '<span style="font-size:13px">หน่วยงาน: ' + esc(loc.name) + '</span></div></div>';
+  }
+
+  var parsed = {};
+  try { parsed = JSON.parse(row['ผลรายข้อ(JSON)'] || '{}'); } catch (e) {}
+  var answers = parsed.answers || {}, remarks = parsed.remarks || {};
+
+  var html = head +
+    '<table><tr>' +
+    '<td style="width:50%"><b>ผู้ตรวจสอบ(QA):</b> ' + esc(row['ชื่อQA']) + '</td>' +
+    '<td><b>วันที่:</b> ' + esc(row['วันที่']) + ' &nbsp; <b>เวลา:</b> ' + esc(row['เวลา']) + ' น.</td></tr>' +
+    '<tr><td><b>จำนวนพนักงานประจำจุด:</b> ' + esc(row['จำนวนพนักงานประจำจุด'] || '-') + '</td>' +
+    '<td><b>หน่วยงาน:</b> ' + esc(loc.name) + '</td></tr>' +
+    '<tr><td><b>ผู้ประสานงานหน้างาน:</b> ' + esc(row['ผู้ประสานงานหน้างาน'] || '-') + '</td>' +
+    '<td><b>ผู้ว่าจ้าง:</b> ' + esc(row['ผู้ว่าจ้าง'] || '-') + '</td></tr></table>' +
+
+    '<table><tr><th style="text-align:left">รายการตรวจ</th>' +
+    '<th style="width:52px">ปกติ</th><th style="width:62px">ปรับปรุง</th><th style="width:30%">หมายเหตุ</th></tr>';
+
+  var lastSection = null;
+  questions.forEach(function (q) {
+    if (q.section && q.section !== lastSection) {
+      html += '<tr><td colspan="4" class="b" style="background:#f3f3f3">หัวข้อ: ' + esc(q.section) + '</td></tr>';
+      lastSection = q.section;
+    }
+    var a = answers[q.order] || '';
+    html += '<tr><td>' + esc(q.question) + '</td>' +
+      '<td class="c mark">' + (a === 'ปกติ' ? '✓' : '') + '</td>' +
+      '<td class="c mark">' + (a === 'ปรับปรุง' ? '✗' : '') + '</td>' +
+      '<td>' + esc(remarks[q.order] || '') + '</td></tr>';
+  });
+  html += '</table>';
+
+  html += '<div class="b">ปัญหาที่พบ / ข้อเสนอแนะ และแนวทางแก้ไข</div><div class="lines">';
+  var issues = String(row['ปัญหา/ข้อเสนอแนะ'] || '').split('\n');
+  for (var i = 0; i < Math.max(3, issues.length); i++) html += '<div>' + esc(issues[i] || '') + '</div>';
+  html += '</div>';
+
+  html += '<div class="sig">' +
+    '<div><div class="sigline"></div>ผู้รับรองข้อมูล (QA)<br>' + esc(row['ชื่อQA']) + ' · ' + esc(row['วันที่']) + '</div>' +
+    '<div><div class="sigline"></div>ผู้ว่าจ้าง<br>' + esc(row['ผู้ว่าจ้าง'] || '') + '</div>' +
+    '</div></div>';
+  return html;
+}
+
+/** หน้าแบบประเมินความพึงพอใจ */
+function surveyPage(loc, row, skips, questions, month) {
+  var head =
+    '<div class="page">' +
+    '<h1>แบบประเมินความพึงพอใจการบริการทำความสะอาด</h1>' +
+    '<div class="sub">' + esc(ORG_NAME) + ' · ประจำเดือน ' + esc(thaiMonth(month)) +
+    ' <span style="float:right;font-size:11px">FM-OP04-03 REV.03</span></div>';
+
+  if (!row) {
+    var note = skips.length
+      ? '<div class="meta">บันทึกไว้: ลูกค้าไม่สะดวกประเมิน ' + skips.length + ' ครั้ง — ' +
+        esc(skips.map(function (s) { return s['วันที่'] + ' (' + s['เหตุผลไม่สะดวก'] + ')'; }).join(' · ')) + '</div>'
+      : '';
+    return head + '<div class="empty">— ลูกค้ายังไม่ได้ประเมินในเดือนนี้ —<br>' +
+      '<span style="font-size:13px">หน่วยงาน: ' + esc(loc.name) + '</span></div>' + note + '</div>';
+  }
+
+  var scores = {};
+  try { scores = JSON.parse(row['คะแนนรายข้อ(JSON)'] || '{}'); } catch (e) {}
+
+  var html = head +
+    '<table><tr>' +
+    '<td style="width:55%"><b>หน่วยงาน:</b> ' + esc(loc.name) +
+    (row['พื้นที่/อาคาร/ชั้น'] ? ' · ' + esc(row['พื้นที่/อาคาร/ชั้น']) : '') + '</td>' +
+    '<td><b>วันที่ประเมิน:</b> ' + esc(row['วันที่']) + '</td></tr>' +
+    '<tr><td><b>ผู้ประเมิน (ผู้ว่าจ้าง):</b> ' + esc(row['ผู้ประเมิน'] || '-') +
+    (row['ตำแหน่งผู้ประเมิน'] ? ' · ' + esc(row['ตำแหน่งผู้ประเมิน']) : '') + '</td>' +
+    '<td><b>พนักงานทั้งหมด:</b> ' + esc(row['จำนวนพนักงานทั้งหมด'] || '-') +
+    ' คน (หัวหน้า ' + esc(row['หัวหน้างาน(คน)'] || '-') + ' / พนักงาน ' + esc(row['พนักงาน(คน)'] || '-') + ')</td></tr></table>';
+
+  html += '<table><tr><th rowspan="2" style="width:34px">ลำดับ</th><th rowspan="2" style="text-align:left">รายละเอียด</th>' +
+    '<th colspan="4">ปรับปรุง (1-4)</th><th colspan="3">พอใช้ (5-7)</th><th colspan="3">ดี (8-10)</th></tr><tr>';
+  for (var s = 1; s <= 10; s++) html += '<th style="width:34px">' + s + '</th>';
+  html += '</tr>';
+
+  var bands = { low: 0, mid: 0, high: 0 }, total = 0;
+  questions.forEach(function (q) {
+    var sc = Number(scores[q.order]) || 0;
+    total += sc;
+    if (sc >= 8) bands.high += sc; else if (sc >= 5) bands.mid += sc; else bands.low += sc;
+    html += '<tr><td class="c">' + q.order + '</td><td>' + esc(q.question) + '</td>';
+    for (var i = 1; i <= 10; i++) {
+      html += '<td class="c mark">' + (i === sc ? '✓' : '') + '</td>';
+    }
+    html += '</tr>';
+  });
+
+  html += '<tr><td colspan="2" class="b">รวมคะแนนในแต่ละส่วน (ปรับปรุง / พอใช้ / ดี)</td>' +
+    '<td colspan="4" class="c b">' + (bands.low || '') + '</td>' +
+    '<td colspan="3" class="c b">' + (bands.mid || '') + '</td>' +
+    '<td colspan="3" class="c b">' + (bands.high || '') + '</td></tr>' +
+    '<tr><td colspan="2" class="b">รวมคะแนนความพึงพอใจทั้งหมด</td>' +
+    '<td colspan="10" class="c b" style="font-size:15px">' + total + ' / ' + (questions.length * 10) + ' คะแนน</td></tr></table>';
+
+  html += '<div class="b">สิ่งที่ผู้ว่าจ้างต้องการให้ปรับปรุงแก้ไข / พัฒนา</div><div class="lines">';
+  var cm = String(row['ข้อเสนอแนะ'] || '').split('\n');
+  for (var c = 0; c < Math.max(2, cm.length); c++) html += '<div>' + esc(cm[c] || '') + '</div>';
+  html += '</div>';
+
+  html += '<div class="sig">' +
+    '<div><div class="sigline"></div>ผู้ประเมิน (ผู้ว่าจ้าง)<br>' + esc(row['ผู้ประเมิน'] || '') + '</div>' +
+    '<div><div class="sigline"></div>เจ้าหน้าที่ควบคุมคุณภาพ (QA)<br>' + esc(row['ชื่อQA']) + '</div>' +
+    '</div></div>';
+  return html;
+}
 
 // ===================== ส่งออก CSV =====================
 document.getElementById('btnCsv').onclick = function () {
