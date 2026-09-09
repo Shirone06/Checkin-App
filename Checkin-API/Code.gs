@@ -13,8 +13,25 @@
 /** ไอดีของ Google Sheet — เว้นว่างไว้แล้วรัน setup() ระบบจะสร้างให้ใหม่ */
 var SPREADSHEET_ID = '';
 
-/** รหัสผ่านสำหรับหน้า Dashboard และหน้าจัดการหน่วยงาน (เปลี่ยนก่อนใช้จริง!) */
-var ADMIN_PIN = 'CHANGE_ME';
+/**
+ * รหัสผ่านสำหรับหน้า Dashboard และหน้าจัดการหน่วยงาน
+ *
+ * เก็บไว้ใน Script Property ชื่อ ADMIN_PIN ไม่ใช่ในไฟล์นี้
+ * เพราะไฟล์นี้อยู่ใน repo สาธารณะ ถ้าเขียนรหัสจริงลงไปเท่ากับประกาศให้ทุกคนรู้
+ *
+ * ตั้งค่าที่: Apps Script → ⚙️ การตั้งค่าโปรเจกต์ → พร็อพเพอร์ตี้ของสคริปต์
+ *            → เพิ่มพร็อพเพอร์ตี้  ชื่อ ADMIN_PIN  ค่า = รหัสที่ต้องการ
+ * ตั้งครั้งเดียวอยู่ถาวร วางโค้ดใหม่ทับกี่รอบก็ไม่หาย
+ */
+var ADMIN_PIN_PLACEHOLDER = 'CHANGE_ME';
+
+function adminPin_() {
+  try {
+    var v = PropertiesService.getScriptProperties().getProperty('ADMIN_PIN');
+    if (v && String(v).trim()) return String(v).trim();
+  } catch (e) { /* ไม่มีสิทธิ์อ่าน property ก็ถือว่ายังไม่ได้ตั้ง */ }
+  return ADMIN_PIN_PLACEHOLDER;
+}
 
 /** โฟลเดอร์ Drive เก็บรูป — เว้นว่างไว้ ระบบจะสร้าง/หาโฟลเดอร์ชื่อด้านล่างให้เอง */
 var PHOTO_FOLDER_ID   = '';
@@ -1208,7 +1225,13 @@ function nextLocId_(sheet, idx) {
 // ===================== ตัวช่วยทั่วไป =====================
 
 function requirePin_(pin) {
-  if (String(pin || '') !== ADMIN_PIN) throw new Error('รหัสผ่านไม่ถูกต้อง');
+  var expect = adminPin_();
+  // ยังไม่ได้ตั้งรหัสจริง = ปิดประตูไว้ก่อน ไม่ปล่อยให้ค่าตัวอย่างใช้เข้าได้
+  if (expect === ADMIN_PIN_PLACEHOLDER) {
+    throw new Error('ยังไม่ได้ตั้งรหัสผ่านผู้ดูแล — เปิด Apps Script → ' +
+                    'การตั้งค่าโปรเจกต์ → พร็อพเพอร์ตี้ของสคริปต์ → เพิ่ม ADMIN_PIN');
+  }
+  if (String(pin || '') !== expect) throw new Error('รหัสผ่านไม่ถูกต้อง');
 }
 
 /**
