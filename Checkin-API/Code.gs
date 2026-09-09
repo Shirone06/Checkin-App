@@ -59,6 +59,19 @@ var ST_DONE = 'เสร็จสิ้น';
 /** คอลัมน์เสริมในแท็บ Locations — รหัสพนักงาน QA ที่ดูแลหน่วยนี้ (หลายคนคั่นด้วย ,) */
 var COL_LOC_QA = 'QA ผู้ดูแล';
 
+/**
+ * คอลัมน์เสริมในแท็บ Employees — อนุญาตให้เช็คอิน "งานเฉพาะกิจ" ได้
+ * (งานครั้งเดียวจบในสถานที่ที่ยังไม่มีพิกัดในระบบ)
+ * ใส่ ใช้งาน / อนุญาต / ใช่ / Y จึงจะเปิดสิทธิ์ เว้นว่าง = ไม่อนุญาต
+ */
+var COL_EMP_ADHOC = 'งานเฉพาะกิจ';
+
+/** คอลัมน์เสริมใน CheckLog — แยกงานประจำกับงานเฉพาะกิจ */
+var COL_LOG_KIND = 'ประเภทงาน';
+
+var KIND_ADHOC   = 'งานเฉพาะกิจ';
+var KIND_NORMAL  = 'งานประจำ';
+
 var SH_CFG    = 'FormConfig';
 var SH_SURVEY = 'SurveyLog';
 var SH_AUDIT  = 'AuditLog';
@@ -205,28 +218,48 @@ function apiBootstrap_(code) {
 function apiCheckin_(d) {
   d = d || {};
   var emp = requireEmployee_(d.empCode);
-  var loc = requireLocation_(d.locationId);
   var fix = requireFix_(d);
 
   if (!d.photo || !d.photo.data) throw new Error('กรุณาแนบรูปถ่ายตอนเช็คอิน');
 
-  // กันเช็คอินซ้ำที่เดิมทั้งที่ยังไม่ได้เช็คเอาท์
-  var open = findOpenLogs_(emp.code);
-  for (var i = 0; i < open.length; i++) {
-    if (open[i].locationId === loc.id) {
-      throw new Error('คุณเช็คอินที่ "' + loc.name + '" ค้างไว้อยู่แล้ว (เวลา ' + open[i].timeIn + ') กรุณาเช็คเอาท์ก่อน');
+  // งานเฉพาะกิจ = งานครั้งเดียวจบในที่ที่ยังไม่มีพิกัดในระบบ จึงตรวจรัศมีไม่ได้
+  // เปิดให้เฉพาะพนักงานที่ถูกกำหนดสิทธิ์ไว้เท่านั้น กันเลี่ยงการตรวจพื้นที่
+  var adhoc     = d.adhoc === true;
+  var placeName = String(d.placeName || '').trim();
+  if (adhoc) {
+    if (!emp.adhoc) {
+      throw new Error('บัญชีของคุณไม่ได้รับสิทธิ์เช็คอินงานเฉพาะกิจ กรุณาติดต่อผู้ดูแลระบบ');
     }
-  }
-
-  var judge = judgeFence_(fix, loc);
-  if (!judge.inside) {
-    throw new Error('คุณอยู่ห่างจาก "' + loc.name + '" ประมาณ ' + fmtDist_(judge.distance) +
-                    ' (อนุญาตไม่เกิน ' + loc.radius + ' ม.) จึงยังเช็คอินไม่ได้');
+    if (!placeName) throw new Error('กรุณากรอกชื่อสถานที่หรือชื่อลูกค้า');
   }
 
   var lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
+    // หาหรือสร้างหน่วยงานภายใต้ lock เดียวกัน กันสร้างซ้ำเมื่อกดพร้อมกัน
+    var loc, distance;
+    if (adhoc) {
+      loc = findLocationByName_(placeName) || createAdhocLocation_(placeName, fix, emp);
+      distance = haversine_(fix.lat, fix.lng, loc.lat, loc.lng);
+    } else {
+      loc = requireLocation_(d.locationId);
+      var judge = judgeFence_(fix, loc);
+      if (!judge.inside) {
+        throw new Error('คุณอยู่ห่างจาก "' + loc.name + '" ประมาณ ' + fmtDist_(judge.distance) +
+                        ' (อนุญาตไม่เกิน ' + loc.radius + ' ม.) จึงยังเช็คอินไม่ได้');
+      }
+      distance = judge.distance;
+    }
+
+    // กันเช็คอินซ้ำที่เดิมทั้งที่ยังไม่ได้เช็คเอาท์
+    var open = findOpenLogs_(emp.code);
+    for (var i = 0; i < open.length; i++) {
+      if (open[i].locationId === loc.id) {
+        throw new Error('คุณเช็คอินที่ "' + loc.name + '" ค้างไว้อยู่แล้ว (เวลา ' +
+                        open[i].timeIn + ') กรุณาเช็คเอาท์ก่อน');
+      }
+    }
+
     var sheet = getSheet_(SH_LOG);
     var idx   = headerIndex_(sheet, HEAD_LOG);
     var now   = new Date();
@@ -245,17 +278,19 @@ function apiCheckin_(d) {
     put_(row, idx, 'ละติจูดเข้า',        fix.lat);
     put_(row, idx, 'ลองจิจูดเข้า',       fix.lng);
     put_(row, idx, 'ความแม่นยำเข้า(ม.)', Math.round(fix.accuracy));
-    put_(row, idx, 'ระยะห่างเข้า(ม.)',   Math.round(judge.distance));
+    put_(row, idx, 'ระยะห่างเข้า(ม.)',   Math.round(distance));
     put_(row, idx, 'รูปเช็คอิน',         photoUrl);
     put_(row, idx, 'หมายเหตุ',           String(d.note || '').trim());
     put_(row, idx, 'สถานะ',              ST_OPEN);
     put_(row, idx, 'เข้าเมื่อ',           now.toISOString());
+    put_(row, idx, COL_LOG_KIND,        adhoc ? KIND_ADHOC : KIND_NORMAL);
 
     sheet.appendRow(row);
 
     return {
       ok: true, logId: logId, timeIn: fmt_(now, 'HH:mm'), date: fmt_(now, 'dd/MM/yyyy'),
-      location: loc.name, distance: Math.round(judge.distance), photo: photoUrl
+      location: loc.name, locationId: loc.id, adhoc: adhoc,
+      distance: Math.round(distance), photo: photoUrl
     };
   } finally {
     lock.releaseLock();
@@ -381,6 +416,7 @@ function apiDashboard_(p) {
         minutes:     numOrNull_(get_(r, idx, 'ระยะเวลา(นาที)')),
         note:        String(get_(r, idx, 'หมายเหตุ')),
         status:      String(get_(r, idx, 'สถานะ')),
+        kind:        String(get_(r, idx, COL_LOG_KIND) || ''),
         startIso:    iso
       });
     }
@@ -872,7 +908,9 @@ function readEmployees_() {
       code:     code,
       name:     String(get_(values[i], idx, 'ชื่อ-นามสกุล')).trim(),
       position: String(get_(values[i], idx, 'ตำแหน่ง')).trim(),
-      active:   isActive_(get_(values[i], idx, 'สถานะ'))
+      active:   isActive_(get_(values[i], idx, 'สถานะ')),
+      // คอลัมน์เสริม — ชีตเก่าที่ยังไม่มีคอลัมน์นี้จะได้ false (ไม่อนุญาต)
+      adhoc:    (COL_EMP_ADHOC in idx) && isYes_(get_(values[i], idx, COL_EMP_ADHOC))
     });
   }
   return out;
@@ -934,6 +972,43 @@ function findLocation_(id) {
   var list = readLocations_(false);
   for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i];
   return null;
+}
+
+/** หาหน่วยงานจากชื่อ (ตัดช่องว่างหัวท้าย ไม่สนตัวพิมพ์เล็กใหญ่) */
+function findLocationByName_(name) {
+  var n = String(name || '').trim().toLowerCase();
+  if (!n) return null;
+  var list = readLocations_(false);
+  for (var i = 0; i < list.length; i++) {
+    if (list[i].name.toLowerCase() === n) return list[i];
+  }
+  return null;
+}
+
+/**
+ * สร้างหน่วยงานใหม่จากจุดที่พนักงานยืนอยู่ตอนเช็คอินงานเฉพาะกิจ
+ * ครั้งต่อไปจะเลือกจากรายการได้เลย และใช้การตรวจรัศมีตามปกติ
+ */
+function createAdhocLocation_(name, fix, emp) {
+  var sheet = getSheet_(SH_LOC);
+  var idx   = headerIndex_(sheet, HEAD_LOC);
+  var id    = nextLocId_(sheet, idx);
+
+  var row = new Array(sheet.getLastColumn() || HEAD_LOC.length).fill('');
+  put_(row, idx, 'รหัสหน่วยงาน',    id);
+  put_(row, idx, 'ชื่อหน่วยงาน',     String(name).trim());
+  put_(row, idx, 'ละติจูด',         fix.lat);
+  put_(row, idx, 'ลองจิจูด',        fix.lng);
+  put_(row, idx, 'รัศมี(ม.)',       DEFAULT_RADIUS_M);
+  put_(row, idx, 'ที่อยู่/หมายเหตุ',
+       'สร้างอัตโนมัติจากงานเฉพาะกิจ ' + nowStr_('dd/MM/yyyy') + ' โดย ' + emp.name);
+  put_(row, idx, 'สถานะ',          'ใช้งาน');
+  sheet.appendRow(row);
+
+  return {
+    id: id, name: String(name).trim(), lat: fix.lat, lng: fix.lng,
+    radius: DEFAULT_RADIUS_M, address: '', qa: [], active: true
+  };
 }
 
 function requireLocation_(id) {
@@ -1183,6 +1258,13 @@ function isActive_(v) {
   return !/^(ปิด|ไม่ใช้งาน|พ้นสภาพ|ลาออก|inactive|disabled|no|false|0)$/i.test(s);
 }
 
+/** ค่าที่ถือว่า "อนุญาต" — ต่างจาก isActive_ ตรงที่เว้นว่าง = ไม่อนุญาต */
+function isYes_(v) {
+  var t = String(v == null ? '' : v).trim();
+  if (!t) return false;
+  return /^(ใช้งาน|อนุญาต|ใช่|เปิด|y|yes|true|1|✓)$/i.test(t);
+}
+
 function isNum_(v)      { return v !== '' && v != null && isFinite(Number(v)); }
 function numOrNull_(v)  { return isNum_(v) ? Number(v) : null; }
 function fmt_(d, p)     { return Utilities.formatDate(d, TZ, p); }
@@ -1226,13 +1308,13 @@ function setup() {
   }
   ss.setSpreadsheetTimeZone(TZ);
 
-  ensureSheet_(ss, SH_EMP, HEAD_EMP, [
-    ['1001', 'ตัวอย่าง พนักงาน', 'ช่างบริการ', 'ใช้งาน']
+  ensureSheet_(ss, SH_EMP, HEAD_EMP.concat([COL_EMP_ADHOC]), [
+    ['1001', 'ตัวอย่าง พนักงาน', 'ช่างบริการ', 'ใช้งาน', '']
   ]);
   ensureSheet_(ss, SH_LOC, HEAD_LOC.concat([COL_LOC_QA]), [
     ['LOC-001', 'ตัวอย่าง หน่วยงาน', 13.7563, 100.5018, 200, 'แก้พิกัดให้ตรงหน้างานจริง', 'ใช้งาน', '']
   ]);
-  ensureSheet_(ss, SH_LOG, HEAD_LOG, []);
+  ensureSheet_(ss, SH_LOG, HEAD_LOG.concat([COL_LOG_KIND]), []);
 
   // เฟส 2: แบบประเมินประจำเดือน — ข้อคำถามตั้งต้นตามแบบฟอร์มกระดาษจริง
   ensureSheet_(ss, SH_CFG, HEAD_CFG, [

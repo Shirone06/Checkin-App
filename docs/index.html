@@ -102,6 +102,25 @@
     <!-- เลือกหน่วยงาน -->
     <div class="card">
       <div class="q">2. เลือกหน่วยงาน <span class="req">*</span></div>
+      <!-- งานเฉพาะกิจ: เห็นเฉพาะพนักงานที่ได้รับสิทธิ์ -->
+      <div class="hide" id="adhocBox">
+        <button type="button" class="loc" id="adhocToggle" style="margin-bottom:10px">
+          <div class="ic">🧹</div>
+          <div class="grow">
+            <div class="nm">งานเฉพาะกิจ (ไม่มีในรายการ)</div>
+            <div class="meta">งานครั้งเดียวจบในสถานที่ที่ยังไม่ได้ลงทะเบียน</div>
+          </div>
+          <span class="badge na" id="adhocBadge">เลือก</span>
+        </button>
+        <div class="hide" id="adhocFields">
+          <label class="fld">ชื่อสถานที่ / ลูกค้า <span style="color:#fc8181">*</span></label>
+          <input type="text" id="adhocName" placeholder="เช่น คอนโดสุขุมวิท 39 ห้อง 1204" autocomplete="off">
+          <div class="hint mt">
+            ระบบจะใช้ตำแหน่งที่คุณยืนอยู่ตอนนี้เป็นพิกัดของสถานที่ และบันทึกไว้ให้เลือกได้ในครั้งถัดไป
+          </div>
+        </div>
+      </div>
+
       <input type="text" id="locSearch" placeholder="🔍 ค้นหาชื่อหน่วยงาน" autocomplete="off">
       <div class="locs mt" id="locList"></div>
       <div class="hint mt" id="locHint"></div>
@@ -386,6 +405,7 @@ var S = {
   locations: [],
   open: [],
   loc: null,          // หน่วยงานที่เลือก
+  adhoc: false,       // โหมดงานเฉพาะกิจ (สถานที่ไม่มีในระบบ)
   photo: null,        // รูปเช็คอิน
   coLog: null,        // รายการที่กำลังเช็คเอาท์
   coPhoto: null,
@@ -555,8 +575,15 @@ function refreshHome() {
 
 // ===================== หน้าเช็คอิน =====================
 document.getElementById('btnGoCheckin').onclick = function () {
-  S.loc = null; S.photo = null; S.search = '';
+  S.loc = null; S.photo = null; S.search = ''; S.adhoc = false;
   document.getElementById('locSearch').value = '';
+  document.getElementById('adhocName').value = '';
+  document.getElementById('adhocFields').classList.add('hide');
+  document.getElementById('adhocToggle').classList.remove('sel');
+  document.getElementById('adhocBadge').textContent = 'เลือก';
+  document.getElementById('adhocBadge').className = 'badge na';
+  // กล่องงานเฉพาะกิจเห็นเฉพาะคนที่ได้รับสิทธิ์ในชีต Employees
+  document.getElementById('adhocBox').classList.toggle('hide', !S.emp.adhoc);
   document.getElementById('ciNote').value = '';
   document.getElementById('photoBox').innerHTML = '';
   document.getElementById('photoPick').classList.remove('hide');
@@ -578,6 +605,23 @@ document.getElementById('locSearch').oninput = function () {
   S.search = this.value.trim().toLowerCase();
   renderLocs();
 };
+
+/** สลับเข้า/ออกโหมดงานเฉพาะกิจ — เลือกได้อย่างใดอย่างหนึ่งกับหน่วยงานในรายการ */
+document.getElementById('adhocToggle').onclick = function () {
+  S.adhoc = !S.adhoc;
+  if (S.adhoc) S.loc = null;
+
+  this.classList.toggle('sel', S.adhoc);
+  document.getElementById('adhocFields').classList.toggle('hide', !S.adhoc);
+  var badge = document.getElementById('adhocBadge');
+  badge.textContent = S.adhoc ? '✓ กำลังใช้' : 'เลือก';
+  badge.className = S.adhoc ? 'badge in' : 'badge na';
+
+  if (S.adhoc) setTimeout(function () { document.getElementById('adhocName').focus(); }, 100);
+  renderLocs(); renderReady();
+};
+
+document.getElementById('adhocName').oninput = renderReady;
 
 /** GPS มีค่าใหม่ → อัปเดตทุกส่วนที่เกี่ยวข้อง */
 function onGeoChange() {
@@ -687,7 +731,8 @@ function renderLocs() {
     b.onclick = function () {
       var id = b.getAttribute('data-id');
       S.loc = S.locations.filter(function (l) { return l.id === id; })[0] || null;
-      renderLocs(); renderReady();
+      if (S.loc && S.adhoc) document.getElementById('adhocToggle').click();
+      else { renderLocs(); renderReady(); }
     };
   });
 
@@ -701,27 +746,37 @@ function renderReady() {
   var btn = document.getElementById('btnCheckin');
   var msg = document.getElementById('ciReady');
   var reasons = [];
+  var adhocName = document.getElementById('adhocName').value.trim();
 
   if (!Geo.fix)              reasons.push('รอสัญญาณ GPS');
   else if (!Geo.isUsable())  reasons.push('GPS ยังคลาดเคลื่อนเกิน ±' + MAX_ACCURACY_M + ' ม.');
-  if (!S.loc)                reasons.push('ยังไม่ได้เลือกหน่วยงาน');
   if (!S.photo)              reasons.push('ยังไม่ได้แนบรูป');
 
-  var dist = null, inside = false;
-  if (Geo.fix && S.loc) {
+  var dist = null;
+  if (S.adhoc) {
+    // งานเฉพาะกิจไม่มีพิกัดให้เทียบ จึงไม่ตรวจรัศมี แต่ยังบังคับ GPS กับรูปเหมือนเดิม
+    if (!adhocName) reasons.push('ยังไม่ได้กรอกชื่อสถานที่');
+  } else if (!S.loc) {
+    reasons.push('ยังไม่ได้เลือกหน่วยงาน');
+  } else if (Geo.fix) {
     dist = distanceM(Geo.fix.lat, Geo.fix.lng, S.loc.lat, S.loc.lng);
-    inside = dist <= S.loc.radius;
-    if (!inside) reasons.push('คุณอยู่ห่างจาก ' + S.loc.name + ' ' + fmtDist(dist) +
-                              ' (อนุญาต ' + S.loc.radius + ' ม.)');
+    if (dist > S.loc.radius) {
+      reasons.push('คุณอยู่ห่างจาก ' + S.loc.name + ' ' + fmtDist(dist) +
+                   ' (อนุญาต ' + S.loc.radius + ' ม.)');
+    }
   }
 
   var ready = reasons.length === 0;
   btn.disabled = !ready;
-  btn.textContent = ready ? '✅ เช็คอินที่ ' + S.loc.name : 'เช็คอิน';
+  btn.textContent = !ready ? 'เช็คอิน'
+    : S.adhoc ? '✅ เช็คอินงานเฉพาะกิจ'
+              : '✅ เช็คอินที่ ' + S.loc.name;
 
-  msg.innerHTML = ready
-    ? '<span style="color:#9ae6b4">อยู่ในพื้นที่แล้ว — ห่างจากจุดหมาย ' + fmtDist(dist) + '</span>'
-    : esc('ยังเช็คอินไม่ได้: ' + reasons.join(' · '));
+  msg.innerHTML = !ready
+    ? esc('ยังเช็คอินไม่ได้: ' + reasons.join(' · '))
+    : S.adhoc
+      ? '<span style="color:#fbd38d">งานเฉพาะกิจ — ระบบจะบันทึกพิกัดที่คุณยืนอยู่เป็นจุดอ้างอิง</span>'
+      : '<span style="color:#9ae6b4">อยู่ในพื้นที่แล้ว — ห่างจากจุดหมาย ' + fmtDist(dist) + '</span>';
 }
 
 
@@ -748,7 +803,10 @@ function hookPhoto(inputId, onDone, locNameFn) {
   });
 }
 
-function ciLocName() { return S.loc ? S.loc.name : ''; }
+function ciLocName() {
+  if (S.adhoc) return document.getElementById('adhocName').value.trim();
+  return S.loc ? S.loc.name : '';
+}
 function coLocName() { return S.coLog ? S.coLog.location : ''; }
 
 hookPhoto('fCam', setCiPhoto, ciLocName);
@@ -788,9 +846,16 @@ document.getElementById('btnCheckin').onclick = function () {
   var btn = this;
   setErr('ciErr', '');
 
-  if (!Geo.fix || !S.loc || !S.photo) return;
-  var dist = distanceM(Geo.fix.lat, Geo.fix.lng, S.loc.lat, S.loc.lng);
-  if (dist > S.loc.radius) { renderReady(); return setErr('ciErr', 'คุณอยู่นอกพื้นที่ที่กำหนด'); }
+  if (!Geo.fix || !S.photo) return;
+  var adhocName = document.getElementById('adhocName').value.trim();
+
+  if (S.adhoc) {
+    if (!adhocName) return setErr('ciErr', 'กรุณากรอกชื่อสถานที่');
+  } else {
+    if (!S.loc) return;
+    var dist = distanceM(Geo.fix.lat, Geo.fix.lng, S.loc.lat, S.loc.lng);
+    if (dist > S.loc.radius) { renderReady(); return setErr('ciErr', 'คุณอยู่นอกพื้นที่ที่กำหนด'); }
+  }
 
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> กำลังบันทึก…';
@@ -798,7 +863,9 @@ document.getElementById('btnCheckin').onclick = function () {
   apiPost({
     action:     'checkin',
     empCode:    S.emp.code,
-    locationId: S.loc.id,
+    adhoc:      S.adhoc,
+    placeName:  S.adhoc ? adhocName : '',
+    locationId: S.adhoc ? '' : S.loc.id,
     lat:        Geo.fix.lat,
     lng:        Geo.fix.lng,
     accuracy:   Geo.fix.acc,
@@ -807,13 +874,15 @@ document.getElementById('btnCheckin').onclick = function () {
   })
   .then(function (res) {
     Geo.stop();
-    showDone('✅', 'เช็คอินสำเร็จ', [
-      ['หน่วยงาน', res.location],
-      ['วันที่',    res.date],
-      ['เวลาเข้า',  res.timeIn + ' น.'],
-      ['ระยะห่างจากจุด', fmtDist(res.distance)],
-      ['รหัสรายการ', res.logId]
-    ]);
+    var rows = [
+      [res.adhoc ? 'สถานที่' : 'หน่วยงาน', res.location],
+      ['วันที่',   res.date],
+      ['เวลาเข้า', res.timeIn + ' น.']
+    ];
+    if (res.adhoc) rows.push(['ประเภทงาน', 'งานเฉพาะกิจ — บันทึกสถานที่ใหม่ให้แล้ว']);
+    else           rows.push(['ระยะห่างจากจุด', fmtDist(res.distance)]);
+    rows.push(['รหัสรายการ', res.logId]);
+    showDone('✅', 'เช็คอินสำเร็จ', rows);
   })
   .catch(function (e) {
     btn.disabled = false;
