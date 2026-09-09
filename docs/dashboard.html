@@ -802,12 +802,14 @@ function surveyPage(loc, row, skips, questions, month) {
 
   // รวมคะแนนแต่ละส่วนก่อน แล้วเอาสามส่วนมาบวกกันเป็นยอดรวม
   var grand = bands.low + bands.mid + bands.high;
-  html += '<tr><td colspan="2" class="c">รวมคะแนนในแต่ละส่วน ( ปรับปรุง / พอใช้ / ดี )</td>' +
+  // แถวสรุปตามต้นฉบับ: แถวบนชิดซ้าย · แถวล่างแยกช่องตัวเลขกับคำว่า "คะแนน"
+  html += '<tr><td colspan="2">รวมคะแนนในแต่ละส่วน ( ปรับปรุง / พอใช้ / ดี )</td>' +
       '<td colspan="4" class="c b">' + bands.low + '</td>' +
       '<td colspan="3" class="c b">' + bands.mid + '</td>' +
       '<td colspan="3" class="c b">' + bands.high + '</td></tr>' +
-    '<tr><td colspan="9" class="c b">รวมคะแนนความพึงพอใจทั้งหมด</td>' +
-      '<td colspan="3" class="c b">' + grand + ' คะแนน</td></tr></table>';
+    '<tr><td colspan="6" class="c">รวมคะแนนความพึงพอใจทั้งหมด</td>' +
+      '<td colspan="3" class="c b">' + grand + '</td>' +
+      '<td colspan="3" class="c">คะแนน</td></tr></table>';
 
   // ---- ย่อหน้าขอบคุณ + ช่องข้อเสนอแนะ ----
   html += '<div class="thanks"><span class="in"></span>' +
